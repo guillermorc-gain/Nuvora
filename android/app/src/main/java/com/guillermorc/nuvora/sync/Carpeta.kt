@@ -3,6 +3,7 @@ package com.guillermorc.nuvora.sync
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.google.firebase.auth.FirebaseAuth
 import java.io.File
 
 /**
@@ -13,8 +14,20 @@ import java.io.File
 object Carpeta {
     const val ID = "nuvora"
 
-    fun raiz(context: Context): File =
-        File(context.getExternalFilesDir(null) ?: context.filesDir, "Nuvora").apply { mkdirs() }
+    /**
+     * Dónde guarda sus cosas la cuenta con la que has entrado. La primera cuenta usa la
+     * carpeta de siempre; si entras con otra, tiene la suya aparte (no ve lo de la otra).
+     */
+    fun base(context: Context): File {
+        val ext = context.getExternalFilesDir(null) ?: context.filesDir
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return ext
+        val prefs = context.getSharedPreferences("ajustes", Context.MODE_PRIVATE)
+        val dueno = prefs.getString("duenoCarpeta", null)
+        if (dueno == null) { prefs.edit().putString("duenoCarpeta", uid).apply(); return ext }
+        return if (dueno == uid) ext else File(ext, "cuentas/$uid").apply { mkdirs() }
+    }
+
+    fun raiz(context: Context): File = File(base(context), "Nuvora").apply { mkdirs() }
 
     /** Lo que se enseña: sin los archivos internos de Syncthing. */
     fun listar(dir: File): List<File> = (dir.listFiles() ?: emptyArray())

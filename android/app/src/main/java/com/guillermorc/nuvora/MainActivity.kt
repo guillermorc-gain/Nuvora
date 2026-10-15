@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.Environment
+import android.provider.ContactsContract
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsetsController
@@ -170,6 +171,19 @@ class MainActivity : Activity() {
                         override fun onResult(result: Void?) {}
                         override fun onError(e: ClearCredentialException) {}
                     })
+            }
+        }
+
+        /** Elegir un contacto del móvil (para añadirlo de amigo). Devuelve su correo a la página. */
+        @JavascriptInterface
+        fun elegirContacto() {
+            runOnUiThread {
+                try {
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Email.CONTENT_URI), ELEGIR_CONTACTO)
+                } catch (_: ActivityNotFoundException) {
+                    js("window.nuvoraContactos && nuvoraContactos([])")
+                }
             }
         }
 
@@ -366,6 +380,7 @@ class MainActivity : Activity() {
     @Deprecated("Activity sin AndroidX")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ELEGIR_CONTACTO) return contactoElegido(if (resultCode == RESULT_OK) data?.data else null)
         if (requestCode != ELEGIR_ARCHIVOS) return
         val callback = subida ?: return
         subida = null
@@ -374,6 +389,21 @@ class MainActivity : Activity() {
         val uris = if (varios != null) Array(varios.itemCount) { varios.getItemAt(it).uri }
         else data.data?.let { arrayOf(it) }
         callback.onReceiveValue(uris)
+    }
+
+    /** El selector de contactos de Android da permiso para leer solo ese contacto (no hace falta pedir permisos). */
+    private fun contactoElegido(uri: Uri?) {
+        val lista = org.json.JSONArray()
+        if (uri != null) runCatching {
+            contentResolver.query(
+                uri,
+                arrayOf(ContactsContract.CommonDataKinds.Email.ADDRESS, ContactsContract.Contacts.DISPLAY_NAME),
+                null, null, null,
+            )?.use { c ->
+                if (c.moveToFirst()) lista.put(JSONObject().put("email", c.getString(0) ?: "").put("name", c.getString(1) ?: ""))
+            }
+        }
+        js("window.nuvoraContactos && nuvoraContactos($lista)")
     }
 
     /** Las descargas van a «Descargas» con su nombre, usando la sesión de la app. */
@@ -417,6 +447,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ELEGIR_ARCHIVOS = 7
+        private const val ELEGIR_CONTACTO = 8
         private const val PUERTO = 3000
     }
 }

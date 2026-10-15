@@ -117,6 +117,26 @@ fun PantallaDispositivos(usuario: FirebaseUser) {
                 }
             }
         }
+        estado.error?.takeIf { estado.activo }?.let { msg ->
+            item {
+                Tarjeta {
+                    Text("No se pueden encontrar tus otros dispositivos", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                    Text(msg, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (estado.activo && estado.otros.isEmpty() && estado.error == null) {
+            item {
+                Tarjeta {
+                    Text("Solo está este dispositivo", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Instala Nuvora en tu otro móvil o tablet y entra con la misma cuenta de Google (${usuario.email ?: ""}). " +
+                            "Con otra cuenta no se sincronizan: cada cuenta tiene su propia carpeta.",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         items(estado.otros, key = { it.dispositivo.id }) { e ->
             Tarjeta {
                 Row(verticalAlignment = Alignment.CenterVertically) {

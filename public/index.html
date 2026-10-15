@@ -39,7 +39,7 @@
   <div id="app" class="app hidden">
     <header class="topbar">
       <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menú" data-icon="menu"></button>
-      <a class="brand" href="#/drive" aria-label="Nuvora"><img src="/icon.svg" alt=""><span class="wordmark on-head">Nuvora</span></a>
+      <a class="brand" href="#/drive" aria-label="Nuvora"><img src="/icon.svg" alt=""></a>
       <div class="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
         <input id="search" type="search" placeholder="Buscar en Nuvora" autocomplete="off">
@@ -47,11 +47,11 @@
       <div class="top-actions">
         <span class="live" id="live" title="Sincronización en tiempo real"><i></i><span>En vivo</span></span>
         <button class="icon-btn" id="theme-btn" title="Modo claro u oscuro" aria-label="Modo claro u oscuro" data-icon="moon"></button>
-        <button class="icon-btn" id="settings-btn" title="Apariencia" aria-label="Apariencia" data-icon="palette"></button>
         <div class="ring" id="ring"><button class="avatar" id="avatar-btn" aria-label="Cuenta"></button></div>
       </div>
     </header>
 
+    <div class="scrim" id="scrim"></div>
     <aside class="sidebar" id="sidebar">
       <div class="new-wrap">
         <button class="btn new-btn" id="new-btn"><span class="plus" data-icon="plus"></span> Nuevo</button>
@@ -94,7 +94,6 @@
       <a href="#/shared" data-view="shared"><span class="pill" data-icon="people"></span><em>Compartido</em></a>
       <a href="#/recent" data-view="recent"><span class="pill" data-icon="clock"></span><em>Recientes</em></a>
       <a href="#/starred" data-view="starred"><span class="pill" data-icon="star"></span><em>Destacados</em></a>
-      <a href="#/sync" data-view="sync"><span class="pill" data-icon="sync"></span><em>Sincronizar</em></a>
     </nav>
     <button class="fab" id="fab"><span data-icon="plus"></span>Nuevo</button>
   </div>

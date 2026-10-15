@@ -128,7 +128,13 @@ test('descarga con rangos (streaming de video) y ZIP de carpeta', async () => {
 test('compartir con otro usuario y permisos', async () => {
   const fotos = (await call(ana, 'GET', '/api/nodes?parent=root')).body.items.find((i) => i.name === 'Fotos');
   assert.equal((await call(beto, 'GET', `/api/nodes?parent=${fotos.id}`)).status, 404);
-  assert.equal((await call(ana, 'POST', `/api/nodes/${fotos.id}/shares`, { email: 'nadie@x.com' })).status, 404);
+  // Con alguien que aún no ha entrado: se le guarda para cuando entre con Google
+  const pendiente = await call(ana, 'POST', `/api/nodes/${fotos.id}/shares`, { email: 'nadie@x.com' });
+  assert.equal(pendiente.status, 201);
+  assert.equal(pendiente.body.pendiente, true);
+  assert.equal((await call(ana, 'POST', `/api/nodes/${fotos.id}/shares`, { email: 'no-es-un-correo' })).status, 400);
+  // Y no se puede reclamar esa cuenta con contraseña (cualquiera podría escribir ese correo)
+  assert.equal((await call(null, 'POST', '/api/auth/register', { name: 'x', email: 'nadie@x.com', password: 'contraseña-larga' })).status, 409);
   await call(ana, 'POST', `/api/nodes/${fotos.id}/shares`, { email: 'beto@ejemplo.com', role: 'viewer' });
 
   const shared = (await call(beto, 'GET', '/api/views/shared')).body.items;
@@ -346,4 +352,26 @@ test('iniciar sesión con Google y vincular otro dispositivo con un código', as
     srv.closeAllConnections();
     srv.close();
   }
+});
+
+test('amigos: añadir, ver lo compartido y cuentas pendientes', async () => {
+  const add = await call(ana, 'POST', '/api/amigos', { email: 'beto@ejemplo.com' });
+  assert.equal(add.status, 201);
+  assert.equal(add.body.amigo.pendiente, false);
+  // Es mutuo: Beto también tiene a Ana
+  const deBeto = (await call(beto, 'GET', '/api/amigos')).body.amigos;
+  assert.ok(deBeto.some((a) => a.name === 'ana'));
+  const amigoBeto = (await call(ana, 'GET', '/api/amigos')).body.amigos.find((a) => a.email === 'beto@ejemplo.com');
+  const compartido = (await call(ana, 'GET', `/api/amigos/${amigoBeto.id}/compartido`)).body;
+  assert.ok(compartido.porMi.some((i) => i.name === 'Fotos'));
+  // Alguien que aún no usa Nuvora
+  const nuevo = await call(ana, 'POST', '/api/amigos', { email: 'zoe@ejemplo.com', name: 'Zoe' });
+  assert.equal(nuevo.body.amigo.pendiente, true, JSON.stringify(nuevo.body));
+  assert.equal((await call(ana, 'POST', '/api/amigos', { email: 'mal' })).status, 400);
+  const buscar = (await call(ana, 'POST', '/api/amigos/buscar', { emails: ['beto@ejemplo.com', 'zoe@ejemplo.com'] })).body.usuarios;
+  assert.deepEqual(buscar.map((u) => u.email), ['beto@ejemplo.com']);
+  assert.equal((await call(ana, 'DELETE', `/api/amigos/${nuevo.body.amigo.id}`)).status, 200);
+  assert.equal((await call(ana, 'GET', `/api/amigos/${nuevo.body.amigo.id}/compartido`)).status, 404);
+  const me = (await call(ana, 'GET', '/api/me')).body;
+  assert.ok(me.quota === null || me.quota > 0);
 });

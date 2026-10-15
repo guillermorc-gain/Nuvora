@@ -222,10 +222,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         web.loadHTMLString(paginaMensaje("Abriendo Nuvora…", "Arrancando tu nube en este Mac."), baseURL: nil)
 
         ventana = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
-                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                            backing: .buffered, defer: false)
+        // Barra de título normal: los botones de la ventana no tapan la app y se puede arrastrar
         ventana.title = "Nuvora"
-        ventana.titlebarAppearsTransparent = true
         ventana.minSize = NSSize(width: 420, height: 520)
         ventana.contentView = web
         ventana.delegate = self

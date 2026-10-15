@@ -19,15 +19,17 @@ const state = {
 try { state.layout = localStorage.getItem('nuvora-layout') || 'grid'; } catch { /* sin almacenamiento */ }
 
 const VIEW_SUBTITLES = {
-  drive: 'Tus archivos y carpetas', shared: 'Lo que otras personas comparten contigo',
+  drive: 'Tus archivos y carpetas',
   'shared-by-me': 'Personas invitadas y enlaces públicos', recent: 'Lo último que subiste o cambiaste',
   starred: 'Lo que quieres tener a mano', trash: 'Se puede restaurar hasta que la vacíes',
   sync: 'Una carpeta de tu ordenador, siempre al día',
+  shared: 'Tus amigos y lo que comparten contigo',
 };
 
 const VIEW_TITLES = {
   drive: 'Mi unidad', shared: 'Compartido conmigo', 'shared-by-me': 'Compartido por mí',
   recent: 'Recientes', starred: 'Destacados', trash: 'Papelera', search: 'Resultados de búsqueda', sync: 'Sincronización',
+  amigo: 'Amigo',
 };
 
 // ---------- API ----------
@@ -75,6 +77,8 @@ function authError(msg) {
 }
 
 function entrar(user) {
+  // Si ya había una sesión abierta en esta página (otra cuenta), se empieza de cero
+  if (started) { location.hash = ''; location.reload(); return; }
   state.me = user;
   startApp();
 }
@@ -237,10 +241,15 @@ function renderAccount() {
   av.style.backgroundColor = me.color;
   av.style.backgroundImage = me.foto ? `url("${me.foto.replace(/"/g, '%22')}")` : '';
   av.classList.toggle('foto', !!me.foto);
-  const pct = Math.min(100, (me.used / me.quota) * 100);
-  $('#storage-fill').style.width = `${Math.max(pct, me.used ? 1 : 0)}%`;
-  $('#storage-text').textContent = `${formatSize(me.used)} de ${formatSize(me.quota)} usados`;
+  $('.storage-bar').classList.toggle('hidden', !me.quota);
+  if (me.quota) {
+    const pct = Math.min(100, (me.used / me.quota) * 100);
+    $('#storage-fill').style.width = `${Math.max(pct, me.used ? 1 : 0)}%`;
+  }
+  $('#storage-text').textContent = espacioTexto(me);
 }
+
+const espacioTexto = (me) => me.quota ? `${formatSize(me.used)} de ${formatSize(me.quota)} usados` : `${formatSize(me.used)} usados · espacio ilimitado`;
 
 async function refreshMe() {
   try { state.me = await api('GET', '/api/me'); renderAccount(); } catch { /* ignorado */ }
@@ -255,6 +264,7 @@ function connectEvents() {
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'shared') toast(`${msg.by} compartió «${msg.name}» contigo`);
+    if (msg.type === 'amigo') { toast(`${msg.by} te ha añadido como amigo`); amigosCache = null; }
     if (msg.type === 'emparejado') { toast(`${msg.nombre || 'Un móvil'} se ha emparejado con este ordenador`); if (state.view === 'sync') renderSync(); }
     pulseRing();
     clearTimeout(refreshTimer);
@@ -286,11 +296,14 @@ function route() {
   }
   state.view = VIEW_TITLES[view] ? view : 'drive';
   state.folderId = state.view === 'drive' && arg ? arg : null;
+  state.amigoId = state.view === 'amigo' ? arg : null;
+  if (state.view === 'amigo' && !arg) state.view = 'shared';
   if (state.view === 'search') state.query = decodeURIComponent(arg || '');
   else $('#search').value = '';
   state.selected.clear();
-  $$('.nav a, .tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.view === state.view));
-  $('#sidebar').classList.remove('open');
+  const activa = state.view === 'amigo' ? 'shared' : state.view;
+  $$('.nav a, .tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.view === activa));
+  abrirMenuLateral(false);
   load();
 }
 
@@ -314,12 +327,22 @@ async function load(silent) {
     } else if (state.view === 'search') {
       data = await api('GET', `/api/search?q=${encodeURIComponent(state.query)}`);
       state.folder = null; state.role = 'owner';
+    } else if (state.view === 'amigo') {
+      const r = await api('GET', `/api/amigos/${encodeURIComponent(state.amigoId)}/compartido`);
+      state.amigo = r.amigo;
+      state.grupos = { conmigo: r.conmigo.map((i) => i.id), porMi: r.porMi.map((i) => i.id) };
+      data = { items: [...r.conmigo, ...r.porMi] };
+      state.folder = null; state.role = 'owner';
+    } else if (state.view === 'shared') {
+      const [r, a] = await Promise.all([api('GET', '/api/views/shared'), cargarAmigos(true)]);
+      data = { items: r.items, amigos: a };
+      state.folder = null; state.role = 'owner';
     } else {
       data = await api('GET', `/api/views/${state.view}`);
       state.folder = null; state.role = 'owner';
     }
     // Evita volver a pintar (y cortar un doble clic o recargar miniaturas) si nada cambió
-    const signature = JSON.stringify([state.view, state.folderId, state.query, data.items]);
+    const signature = JSON.stringify([state.view, state.folderId, state.amigoId, state.query, data.items, data.amigos]);
     if (silent && signature === state.signature) return;
     state.signature = signature;
     state.items = data.items;
@@ -348,10 +371,13 @@ function renderCrumbs() {
     el.innerHTML = parts.join('');
   } else if (state.view === 'search') {
     el.innerHTML = `<span>Resultados para «${esc(state.query)}»</span>`;
+  } else if (state.view === 'amigo' && state.amigo) {
+    el.innerHTML = `<a href="#/shared">Compartido</a>${icon('chevron')}<span>${esc(state.amigo.name)}</span>`;
   } else {
     el.innerHTML = `<span data-drop="${state.view === 'drive' ? 'root' : ''}">${VIEW_TITLES[state.view]}</span>`;
   }
-  $('#subtitle').textContent = state.view === 'drive' && state.folder ? '' : VIEW_SUBTITLES[state.view] || '';
+  $('#subtitle').textContent = state.view === 'drive' && state.folder ? ''
+    : state.view === 'amigo' && state.amigo ? state.amigo.email : VIEW_SUBTITLES[state.view] || '';
   $$('[data-layout]').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
   $('.seg').classList.toggle('hidden', state.view === 'sync');
 }
@@ -359,7 +385,7 @@ function renderCrumbs() {
 // ---------- Renderizado ----------
 const EMPTY = {
   drive: ['Arrastra archivos aquí', 'O usa el botón «Nuevo» para subir archivos y carpetas.'],
-  shared: ['Nada compartido todavía', 'Los archivos que otras personas compartan contigo aparecerán aquí.'],
+  shared: ['Nada compartido todavía', 'Lo que tus amigos compartan contigo aparecerá aquí. Toca un amigo para compartir algo con él.'],
   'shared-by-me': ['No has compartido nada', 'Comparte con personas o crea enlaces públicos desde el menú de cada archivo.'],
   recent: ['Sin actividad reciente', 'Los archivos que subas o modifiques aparecerán aquí.'],
   starred: ['Sin destacados', 'Marca con una estrella lo que quieras tener a mano.'],
@@ -387,13 +413,17 @@ function thumbHtml(it) {
 function render() {
   const content = $('#content');
   const items = state.items;
+  if (state.view === 'amigo') return renderAmigo();
+  const cabeza = state.view === 'shared' ? tiraAmigos() : '';
   if (!items.length) {
     const [h, p] = EMPTY[state.view] || EMPTY.drive;
-    content.innerHTML = `<div class="empty">${EMPTY_ART}<h3>${h}</h3><p>${p}</p></div>`;
+    content.innerHTML = `${cabeza}<div class="empty">${EMPTY_ART}<h3>${h}</h3><p>${p}</p></div>`;
     return;
   }
+  // En Compartido, la lista va debajo de los amigos
+  const pre = cabeza ? `${cabeza}<div class="section-title">Compartido contigo</div>` : '';
   if (state.layout === 'list') {
-    content.innerHTML = `<table class="list"><thead><tr>
+    content.innerHTML = pre + `<table class="list"><thead><tr>
       <th>Nombre</th><th class="col-hide">${state.view === 'shared' ? 'Compartido por' : 'Propietario'}</th>
       <th class="col-hide">${state.view === 'trash' ? 'Eliminado' : 'Modificado'}</th><th class="col-hide">Tamaño</th><th></th>
     </tr></thead><tbody>${items.map((it) => {
@@ -410,33 +440,39 @@ function render() {
       </tr>`;
     }).join('')}</tbody></table>`;
   } else {
-    const folders = items.filter((i) => i.type === 'folder');
-    const files = items.filter((i) => i.type === 'file');
-    let html = '';
-    if (folders.length) {
-      html += `<div class="section-title">Carpetas</div><div class="grid folders">${folders.map((it) => `
-        <div class="card folder" data-id="${it.id}" data-drop="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
-          <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:var(--c-folder);fill:var(--c-folder);fill-opacity:.25">${ICONS.folder}</svg>
-            <span class="name">${esc(it.name)}</span>
-            ${it.shared ? `<span class="badge-shared">${icon('people')}</span>` : ''}
-            <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
-        </div>`).join('')}</div>`;
-    }
-    if (files.length) {
-      html += `<div class="section-title">Archivos</div><div class="grid files">${files.map((it) => {
-        const k = fileKind(it);
-        return `<div class="card file" data-id="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
-          <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>
-            <span class="name">${esc(it.name)}</span>
-            <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
-          <div class="thumb">${thumbHtml(it)}</div>
-          <div class="muted small" style="padding:0 14px 10px;margin-top:-4px">${esc(itemLabel(it))}</div>
-        </div>`;
-      }).join('')}</div>`;
-    }
-    content.innerHTML = html;
+    const html = gridHtml(items);
+    content.innerHTML = pre + html;
   }
   paintSelection();
+}
+
+// Tarjetas de carpetas y archivos (cuadrícula)
+function gridHtml(items, titulos = true) {
+  const folders = items.filter((i) => i.type === 'folder');
+  const files = items.filter((i) => i.type === 'file');
+  let html = '';
+  if (folders.length) {
+    html += `${titulos ? '<div class="section-title">Carpetas</div>' : ''}<div class="grid folders">${folders.map((it) => `
+      <div class="card folder" data-id="${it.id}" data-drop="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
+        <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:var(--c-folder);fill:var(--c-folder);fill-opacity:.25">${ICONS.folder}</svg>
+          <span class="name">${esc(it.name)}</span>
+          ${it.shared ? `<span class="badge-shared">${icon('people')}</span>` : ''}
+          <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
+      </div>`).join('')}</div>`;
+  }
+  if (files.length) {
+    html += `${titulos ? '<div class="section-title">Archivos</div>' : ''}<div class="grid files">${files.map((it) => {
+      const k = fileKind(it);
+      return `<div class="card file" data-id="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
+        <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>
+          <span class="name">${esc(it.name)}</span>
+          <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
+        <div class="thumb">${thumbHtml(it)}</div>
+        <div class="muted small" style="padding:0 14px 10px;margin-top:-4px">${esc(itemLabel(it))}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+  return html;
 }
 
 function canDrag(it) {
@@ -593,8 +629,9 @@ $('#avatar-btn').addEventListener('click', (e) => {
   const me = state.me;
   showMenu(r.right - 260, r.bottom + 8, [
     { html: `<div class="menu-head"><b>${esc(me.name)}</b><span class="muted small">${esc(me.email)}</span><br>
-      <span class="muted small">${formatSize(me.used)} de ${formatSize(me.quota)}</span></div>` },
+      <span class="muted small">${esc(espacioTexto(me))}</span></div>` },
     '-',
+    { icon: 'people', label: 'Amigos', action: amigosDialog },
     { icon: 'devices', label: 'Vincular un dispositivo', action: vincularDialog },
     { icon: 'palette', label: 'Apariencia', action: aparienciaDialog },
     { icon: 'keyboard', label: 'Atajos de teclado', action: atajosDialog },
@@ -615,13 +652,12 @@ async function logout() {
 }
 
 $('#theme-btn').addEventListener('click', toggleTheme);
-$('#settings-btn').addEventListener('click', aparienciaDialog);
 $('#fab').addEventListener('click', (e) => {
   if (!canEditHere()) { go('drive'); setTimeout(() => showNewMenu(e.clientX, e.clientY), 120); return; }
   const r = e.currentTarget.getBoundingClientRect();
   showNewMenu(r.right - 230, r.top - 8 - 170);
 });
-$('#menu-btn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#menu-btn').addEventListener('click', () => abrirMenuLateral(!$('#sidebar').classList.contains('open')));
 $$('[data-layout]').forEach((b) => b.addEventListener('click', () => {
   state.layout = b.dataset.layout;
   state.signature = null;
@@ -813,7 +849,7 @@ async function shareDialog(it) {
   const body = document.createElement('div');
   const m = openModal({ title: `Compartir «${it.name}»`, body, wide: true, actions: [{ label: 'Listo', primary: true }], onClose: () => load(true) });
   const draw = async () => {
-    const data = await attempt(() => api('GET', `/api/nodes/${it.id}/shares`));
+    const [data, amigos] = await Promise.all([attempt(() => api('GET', `/api/nodes/${it.id}/shares`)), cargarAmigos()]);
     if (!data) return m.close();
     const avatar = (u) => `<span class="avatar sm" style="background:${u.color}">${esc((u.name || u.email)[0].toUpperCase())}</span>`;
     body.innerHTML = `
@@ -822,6 +858,9 @@ async function shareDialog(it) {
         <select name="role"><option value="viewer">Lector</option><option value="editor">Editor</option></select>
         <button class="btn primary">Compartir</button>
       </form>
+      ${amigos.length ? `<div class="subhead">Tus amigos</div><div class="chips amigos-chips">${amigos.map((a) => `
+        <button type="button" class="chip-amigo" data-amigo="${esc(a.email)}" ${data.shares.some((x) => x.user.id === a.id) ? 'aria-pressed="true"' : ''}>
+          ${avatarHtml(a, 'xs')}<span>${esc(a.name.split(' ')[0])}</span></button>`).join('')}</div>` : ''}
       <div class="subhead">Personas con acceso</div>
       <div class="people">
         <div class="person">${avatar(data.owner)}<div class="who"><b>${esc(data.owner.name)} ${data.owner.id === state.me.id ? '(tú)' : ''}</b><span>${esc(data.owner.email)}</span></div><span class="muted">Propietario</span></div>
@@ -851,7 +890,7 @@ async function shareDialog(it) {
     $('#share-form', body).onsubmit = async (e) => {
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
-      if (await attempt(() => api('POST', `/api/nodes/${it.id}/shares`, f), `Compartido con ${f.email}`)) draw();
+      if (await compartirCon(it, f.email, f.role)) draw();
     };
     $('#link-form', body).onsubmit = async (e) => {
       e.preventDefault();
@@ -864,7 +903,10 @@ async function shareDialog(it) {
     body.onclick = async (e) => {
       const t = e.target.closest('button');
       if (!t) return;
-      if (t.dataset.copy) { if (await copyText(linkUrl(t.dataset.copy))) toast('Enlace copiado'); }
+      if (t.dataset.amigo) {
+        if (t.getAttribute('aria-pressed') === 'true') return toast('Ya lo tiene');
+        if (await compartirCon(it, t.dataset.amigo, $('#share-form select', body).value)) draw();
+      } else if (t.dataset.copy) { if (await copyText(linkUrl(t.dataset.copy))) toast('Enlace copiado'); }
       else if (t.dataset.unlink) { if (await attempt(() => api('DELETE', `/api/links/${t.dataset.unlink}`), 'Enlace desactivado')) draw(); }
       else if (t.dataset.unshare) { if (await attempt(() => api('DELETE', `/api/shares/${t.dataset.unshare}`), 'Acceso quitado')) draw(); }
     };
@@ -880,7 +922,40 @@ function openViewer(start) {
   const el = document.createElement('div');
   el.className = 'viewer';
   document.body.appendChild(el);
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
+  let cerrado = false;
+  const close = (desdeAtras) => {
+    if (cerrado) return;
+    cerrado = true;
+    el.remove();
+    document.removeEventListener('keydown', onKey);
+    window.removeEventListener('popstate', onAtras);
+    if (desdeAtras !== true && history.state && history.state.visor) history.back();
+  };
+  const onAtras = () => close(true);
+  history.pushState({ visor: true }, '');
+  window.addEventListener('popstate', onAtras);
+  let toque = null;
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('header, video, audio, pre')) { toque = null; return; }
+    toque = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (!toque) return;
+    const dy = e.touches[0].clientY - toque.y;
+    const dx = e.touches[0].clientX - toque.x;
+    const st = $('.stage', el);
+    if (st && dy > 0 && Math.abs(dy) > Math.abs(dx)) { st.style.transform = `translateY(${dy}px)`; st.style.opacity = String(Math.max(0.3, 1 - dy / 500)); }
+  }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (!toque) return;
+    const dx = e.changedTouches[0].clientX - toque.x;
+    const dy = e.changedTouches[0].clientY - toque.y;
+    toque = null;
+    const st = $('.stage', el);
+    if (dy > 90 && Math.abs(dy) > Math.abs(dx)) return close();
+    if (st) { st.style.transform = ''; st.style.opacity = ''; }
+    if (files.length > 1 && Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) step(dx < 0 ? 1 : -1);
+  }, { passive: true });
   const step = (d) => { index = (index + d + files.length) % files.length; draw(); };
   const onKey = (e) => {
     if (e.key === 'Escape') close();
@@ -932,11 +1007,13 @@ function openViewer(start) {
 // ---------- Subidas ----------
 const uploadQueue = [];
 let activeUploads = 0;
+let cerrarSubidas = null;
 const uploadsEl = $('#uploads');
 $('#uploads-close').addEventListener('click', () => { uploadsEl.classList.add('hidden'); $('#uploads-list').innerHTML = ''; });
 
 function enqueueUploads(files, parentId) {
   if (!files.length) return;
+  clearTimeout(cerrarSubidas);
   uploadsEl.classList.remove('hidden');
   for (const { file, path } of files) {
     const li = document.createElement('li');
@@ -963,7 +1040,18 @@ function pumpUploads() {
       updateRing();
       updateUploadTitle();
       pumpUploads();
-      if (!activeUploads && !uploadQueue.length) { load(true); refreshMe(); }
+      if (!activeUploads && !uploadQueue.length) {
+        load(true); refreshMe();
+        // Si todo ha ido bien, el aviso de «Subidas completadas» se quita solo
+        clearTimeout(cerrarSubidas);
+        if (!$('#uploads-list .fail')) {
+          cerrarSubidas = setTimeout(() => {
+            if (activeUploads || uploadQueue.length) return;
+            uploadsEl.classList.add('hidden');
+            $('#uploads-list').innerHTML = '';
+          }, 1500);
+        }
+      }
     });
   }
 }
@@ -1173,7 +1261,13 @@ async function pintarMoviles() {
   try {
     [codigo, estado] = await Promise.all([api('GET', '/api/emparejar/codigo'), api('GET', '/api/emparejar/estado')]);
   } catch (err) {
-    caja.innerHTML = `<div class="feature" style="margin-bottom:22px">${icon('sync')}<b>Sincronización con móviles</b><span class="muted small">${esc(err.message)}</span></div>`;
+    let lineas = [];
+    try { lineas = (await api('GET', '/api/emparejar/registro')).lineas; } catch { /* sin registro */ }
+    caja.innerHTML = `<div class="feature" style="margin-bottom:22px">${icon('sync')}<b>Sincronización con móviles</b>
+      <span class="muted small">${esc(err.message)}</span>
+      ${lineas.length ? `<details><summary class="muted small" style="cursor:pointer">Ver qué ha pasado</summary><pre class="cmd registro">${esc(lineas.slice(-25).join('\n'))}</pre></details>` : ''}</div>`;
+    // Se vuelve a mirar sola mientras siga en esta página
+    setTimeout(() => { if (state.view === 'sync' && document.body.contains(caja) && !caja.querySelector('details[open]')) pintarMoviles(); }, 6000);
     return;
   }
   const lista = estado.dispositivos.map((d) => `<div class="person">
@@ -1258,6 +1352,286 @@ function renderSync() {
     if (await copyText(cmd())) toast('Orden copiada');
     else { getSelection().selectAllChildren($('#sync-cmd')); toast('Selecciona la orden y cópiala'); }
   });
+}
+
+// ---------- Amigos ----------
+let amigosCache = null;
+async function cargarAmigos(forzar) {
+  if (amigosCache && !forzar) return amigosCache;
+  try { amigosCache = (await api('GET', '/api/amigos')).amigos; } catch { amigosCache = amigosCache || []; }
+  return amigosCache;
+}
+
+function avatarHtml(u, tam = 'sm') {
+  const foto = u.foto ? ` style="background-image:url('${esc(u.foto)}');background-color:${u.color}"` : ` style="background:${u.color}"`;
+  return `<span class="avatar ${tam} ${u.foto ? 'foto' : ''}"${foto}>${u.foto ? '' : esc((u.name || u.email)[0].toUpperCase())}</span>`;
+}
+
+async function compartirCon(it, email, role = 'viewer') {
+  const r = await attempt(() => api('POST', `/api/nodes/${it.id}/shares`, { email, role }));
+  if (!r) return false;
+  amigosCache = null;
+  toast(r.pendiente ? `Compartido. ${email} lo verá cuando entre en Nuvora con Google` : `Compartido con ${email}`);
+  return true;
+}
+
+// La fila de amigos de la pestaña Compartido
+function tiraAmigos() {
+  const amigos = amigosCache || [];
+  return `<div class="amigos-tira">
+    <button class="amigo-burbuja nuevo" data-accion="nuevo-amigo"><span class="avatar md">${icon('userPlus')}</span><span>Añadir</span></button>
+    ${amigos.map((a) => `<a class="amigo-burbuja" href="#/amigo/${a.id}" title="${esc(a.email)}">
+      ${avatarHtml(a, 'md')}${a.conmigo ? `<i class="cuenta">${a.conmigo}</i>` : ''}
+      <span>${esc(a.name.split(' ')[0])}</span></a>`).join('')}
+  </div>
+  ${amigos.length ? '' : '<p class="muted small amigos-ayuda">Añade a tus amigos por su correo o desde tus contactos. Después toca uno para compartir algo con él.</p>'}`;
+}
+
+contentEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-accion]');
+  if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.accion === 'nuevo-amigo') anadirAmigoDialog();
+  else if (b.dataset.accion === 'compartir-con') elegirParaCompartir(state.amigo);
+}, true);
+
+function renderAmigo() {
+  const a = state.amigo;
+  const conmigo = state.items.filter((i) => state.grupos.conmigo.includes(i.id));
+  const porMi = state.items.filter((i) => state.grupos.porMi.includes(i.id));
+  const nombre = esc(a.name.split(' ')[0]);
+  $('#content').innerHTML = `<div class="amigo-cabeza">${avatarHtml(a, 'lg')}
+      <div><b>${esc(a.name)}</b><span class="muted small">${esc(a.email)}${a.pendiente ? ' · aún no ha entrado en Nuvora' : ''}</span></div>
+      <button class="btn primary" data-accion="compartir-con">${icon('share')} Compartir con ${nombre}</button></div>
+    <div class="section-title">${nombre} comparte contigo</div>
+    ${conmigo.length ? gridHtml(conmigo, false) : `<p class="muted small vacio-grupo">Nada todavía.</p>`}
+    <div class="section-title">Tú compartes con ${nombre}</div>
+    ${porMi.length ? gridHtml(porMi, false) : `<p class="muted small vacio-grupo">Toca «Compartir con ${nombre}» para elegir archivos o carpetas de Mi unidad.</p>`}`;
+  paintSelection();
+}
+
+// Elegir de Mi unidad lo que se comparte con un amigo
+async function elegirParaCompartir(amigo) {
+  if (!amigo) return;
+  const body = document.createElement('div');
+  let carpeta = null;
+  const pila = [];
+  const hechos = new Set();
+  const m = openModal({ title: `Compartir con ${amigo.name}`, body, wide: true, actions: [{ label: 'Listo', primary: true }], onClose: () => load(true) });
+  const draw = async () => {
+    const data = await attempt(() => api('GET', `/api/nodes?parent=${carpeta ? carpeta.id : 'root'}`));
+    if (!data) return m.close();
+    const items = data.items.filter((i) => !i.owner);
+    body.innerHTML = `<div class="elegir-barra">
+        ${carpeta ? `<button class="icon-btn" data-atras aria-label="Atrás">${icon('back')}</button>` : ''}
+        <b>${esc(carpeta ? carpeta.name : 'Mi unidad')}</b>
+        <select id="elegir-rol"><option value="viewer">Puede ver</option><option value="editor">Puede editar</option></select></div>
+      <div class="elegir-lista">${items.length ? items.map((it) => {
+        const k = fileKind(it);
+        return `<div class="elegir-fila" data-id="${it.id}">
+          <svg class="ico" viewBox="0 0 24 24" style="color:${it.type === 'folder' ? 'var(--c-folder)' : k.color}">${ICONS[it.type === 'folder' ? 'folder' : k.icon]}</svg>
+          <span class="n" ${it.type === 'folder' ? 'data-abrir' : ''}>${esc(it.name)}</span>
+          ${it.type === 'folder' ? `<button class="icon-btn" data-abrir aria-label="Abrir">${icon('chevron')}</button>` : ''}
+          <button class="btn ${hechos.has(it.id) ? '' : 'primary'} sm" data-dar ${hechos.has(it.id) ? 'disabled' : ''}>${hechos.has(it.id) ? `${icon('check')} Compartido` : 'Compartir'}</button>
+        </div>`;
+      }).join('') : '<p class="muted">Esta carpeta está vacía.</p>'}</div>`;
+    body.onclick = async (e) => {
+      if (e.target.closest('[data-atras]')) { carpeta = pila.pop() || null; return draw(); }
+      const fila = e.target.closest('.elegir-fila');
+      if (!fila) return;
+      const it = items.find((i) => i.id === fila.dataset.id);
+      if (e.target.closest('[data-abrir]')) { pila.push(carpeta); carpeta = it; return draw(); }
+      if (e.target.closest('[data-dar]')) {
+        if (await compartirCon(it, amigo.email, $('#elegir-rol', body).value)) { hechos.add(it.id); draw(); }
+      }
+    };
+  };
+  draw();
+}
+
+function hayContactos() {
+  return (window.NuvoraApp && typeof window.NuvoraApp.elegirContacto === 'function') || ('contacts' in navigator && 'ContactsManager' in window);
+}
+
+// Contactos del móvil: en la app de Android, el selector de Android; en Chrome, el de la web
+function elegirContactos() {
+  return new Promise((resolve) => {
+    if (window.NuvoraApp && typeof window.NuvoraApp.elegirContacto === 'function') {
+      window.nuvoraContactos = (lista) => { window.nuvoraContactos = null; resolve(lista || []); };
+      window.NuvoraApp.elegirContacto();
+      return;
+    }
+    navigator.contacts.select(['name', 'email'], { multiple: true })
+      .then((r) => resolve(r.flatMap((c) => (c.email || []).map((email) => ({ name: (c.name || [])[0] || '', email })))))
+      .catch(() => resolve([]));
+  });
+}
+
+async function anadirAmigos(lista) {
+  let n = 0;
+  for (const c of lista) {
+    const r = await attempt(() => api('POST', '/api/amigos', { email: c.email, name: c.name }));
+    if (r) { n++; if (lista.length === 1) toast(r.amigo.pendiente ? `${r.amigo.name} añadido. Verá lo que compartas cuando entre en Nuvora con Google` : `${r.amigo.name} ya es tu amigo`); }
+  }
+  if (n > 1) toast(`${n} amigos añadidos`);
+  amigosCache = null;
+  await cargarAmigos(true);
+  if (state.view === 'shared') { state.signature = null; load(true); }
+  return n;
+}
+
+function anadirAmigoDialog(alTerminar) {
+  const contactos = hayContactos();
+  const m = openModal({
+    title: 'Añadir amigo',
+    body: `<p class="muted" style="margin-top:0">Escribe su correo (el de su cuenta de Google). Si aún no usa Nuvora, verá lo que le compartas cuando entre.</p>
+      <input id="amigo-correo" type="email" placeholder="correo@ejemplo.com" autocomplete="email">
+      ${contactos ? `<button class="btn wide" id="amigo-contactos" style="margin-top:12px">${icon('contacts')} Elegir de mis contactos</button>` : ''}`,
+    actions: [{ label: 'Cancelar' }, { label: 'Añadir', primary: true, onClick: async (w) => {
+      const email = $('#amigo-correo', w).value.trim();
+      if (!email) return false;
+      if (!(await anadirAmigos([{ email }]))) return false;
+      alTerminar && alTerminar();
+    } }],
+  });
+  m.el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('.modal footer .primary', m.el).click(); });
+  if (contactos) $('#amigo-contactos', m.el).onclick = async () => {
+    const lista = await elegirContactos();
+    if (!lista.length) return;
+    m.close();
+    await anadirAmigos(lista);
+    alTerminar && alTerminar();
+  };
+}
+
+// Foto de perfil → Amigos
+async function amigosDialog() {
+  const body = document.createElement('div');
+  const m = openModal({ title: 'Amigos', body, wide: true, actions: [{ label: 'Listo', primary: true }] });
+  const draw = async () => {
+    const amigos = await cargarAmigos(true);
+    body.innerHTML = `<div class="amigos-botones">
+        <button class="btn primary" data-nuevo>${icon('userPlus')} Añadir amigo</button>
+        ${hayContactos() ? `<button class="btn" data-contactos>${icon('contacts')} De mis contactos</button>` : ''}</div>
+      <div class="people">${amigos.length ? amigos.map((a) => `<div class="person">${avatarHtml(a)}
+          <div class="who"><b>${esc(a.name)}</b><span>${esc(a.email)}${a.pendiente ? ' · aún no ha entrado' : ''}</span></div>
+          <button class="btn sm" data-ver="${a.id}">Ver</button>
+          <button class="icon-btn" data-quitar="${a.id}" title="Quitar de amigos">${icon('close')}</button></div>`).join('')
+        : '<p class="muted">Aún no tienes amigos en Nuvora. Añádelos para compartir con ellos en un toque.</p>'}</div>`;
+  };
+  body.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-nuevo')) anadirAmigoDialog(draw);
+    else if (b.hasAttribute('data-contactos')) { const l = await elegirContactos(); if (l.length) { await anadirAmigos(l); draw(); } }
+    else if (b.dataset.ver) { m.close(); go('amigo', b.dataset.ver); }
+    else if (b.dataset.quitar) { await attempt(() => api('DELETE', `/api/amigos/${b.dataset.quitar}`), 'Quitado de tus amigos'); amigosCache = null; draw(); }
+  };
+  draw();
+}
+
+// ---------- Menú lateral (móvil) ----------
+function abrirMenuLateral(abrir) {
+  $('#sidebar').classList.toggle('open', abrir);
+  $('#scrim').classList.toggle('on', abrir);
+}
+$('#scrim').addEventListener('click', () => abrirMenuLateral(false));
+$$('.nav a').forEach((a) => a.addEventListener('click', () => abrirMenuLateral(false)));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') abrirMenuLateral(false); });
+{
+  let x0 = null;
+  $('#sidebar').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('#sidebar').addEventListener('touchend', (e) => {
+    if (x0 !== null && e.changedTouches[0].clientX - x0 < -60) abrirMenuLateral(false);
+    x0 = null;
+  }, { passive: true });
+}
+
+// ---------- Pestañas de abajo: se ordenan a tu gusto y se cambia deslizando ----------
+const tabbarEl = $('#tabbar');
+const pestanaVisible = () => getComputedStyle(tabbarEl).display !== 'none';
+function ordenarPestanas() {
+  let orden = [];
+  try { orden = JSON.parse(localStorage.getItem('nuvora-pestanas') || '[]'); } catch { /* sin almacenamiento */ }
+  for (const v of orden) { const a = $(`a[data-view="${v}"]`, tabbarEl); if (a) tabbarEl.appendChild(a); }
+}
+function guardarPestanas() {
+  try { localStorage.setItem('nuvora-pestanas', JSON.stringify([...tabbarEl.children].map((a) => a.dataset.view))); } catch { /* sin almacenamiento */ }
+}
+ordenarPestanas();
+
+// Mantén pulsada una pestaña y arrástrala a otro sitio
+{
+  let espera = null, moviendo = null, x0 = 0, sinClic = false;
+  tabbarEl.addEventListener('contextmenu', (e) => e.preventDefault());
+  tabbarEl.addEventListener('pointerdown', (e) => {
+    const a = e.target.closest('a');
+    if (!a) return;
+    x0 = e.clientX;
+    espera = setTimeout(() => {
+      moviendo = a;
+      a.classList.add('moviendo');
+      tabbarEl.classList.add('ordenando');
+      try { tabbarEl.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, 420);
+  });
+  tabbarEl.addEventListener('pointermove', (e) => {
+    if (!moviendo) { if (Math.abs(e.clientX - x0) > 12) clearTimeout(espera); return; }
+    const tabs = [...tabbarEl.children];
+    const i = tabs.indexOf(moviendo);
+    const w = moviendo.offsetWidth;
+    let dx = e.clientX - x0;
+    if (dx > w / 2 && i < tabs.length - 1) { tabbarEl.insertBefore(tabs[i + 1], moviendo); x0 += w; dx -= w; }
+    else if (dx < -w / 2 && i > 0) { tabbarEl.insertBefore(moviendo, tabs[i - 1]); x0 -= w; dx += w; }
+    moviendo.style.transform = `translateX(${dx}px)`;
+  });
+  const soltar = () => {
+    clearTimeout(espera);
+    if (!moviendo) return;
+    moviendo.style.transform = '';
+    moviendo.classList.remove('moviendo');
+    tabbarEl.classList.remove('ordenando');
+    moviendo = null;
+    sinClic = true;
+    setTimeout(() => { sinClic = false; }, 80);
+    guardarPestanas();
+  };
+  tabbarEl.addEventListener('pointerup', soltar);
+  tabbarEl.addEventListener('pointercancel', soltar);
+  tabbarEl.addEventListener('click', (e) => { if (sinClic) { e.preventDefault(); e.stopPropagation(); } }, true);
+}
+
+// Deslizar a los lados cambia de pestaña (y da la vuelta); desde el borde izquierdo abre el menú
+function cambiarPestana(d) {
+  const vistas = [...tabbarEl.children].map((a) => a.dataset.view);
+  const actual = state.view === 'amigo' ? 'shared' : state.view;
+  let i = vistas.indexOf(actual);
+  if (i < 0) i = d > 0 ? -1 : 0;
+  const v = vistas[(i + d + vistas.length) % vistas.length];
+  const c = $('#content');
+  c.classList.remove('desde-dcha', 'desde-izq');
+  void c.offsetWidth;
+  c.classList.add(d > 0 ? 'desde-dcha' : 'desde-izq');
+  go(v);
+}
+{
+  let t = null;
+  mainEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || !pestanaVisible() || e.target.closest('input, textarea, select, pre, .amigos-tira, .chips')) { t = null; return; }
+    t = { x: e.touches[0].clientX, y: e.touches[0].clientY, ms: Date.now() };
+  }, { passive: true });
+  mainEl.addEventListener('touchend', (e) => {
+    if (!t) return;
+    const dx = e.changedTouches[0].clientX - t.x;
+    const dy = e.changedTouches[0].clientY - t.y;
+    const borde = t.x < 28;
+    const rapido = Date.now() - t.ms < 700;
+    t = null;
+    if (!rapido || Math.abs(dx) < 70 || Math.abs(dx) < 1.8 * Math.abs(dy)) return;
+    if (borde && dx > 0) abrirMenuLateral(true);
+    else cambiarPestana(dx < 0 ? 1 : -1);
+  }, { passive: true });
 }
 
 boot();

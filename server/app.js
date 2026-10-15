@@ -54,8 +54,11 @@ function contentDisposition(type, name) {
 
 function createApp(options = {}) {
   const dataDir = options.dataDir || path.join(__dirname, '..', 'data');
-  const defaultQuota = options.quota || 15 * 1024 ** 3;
+  // Sin límite de espacio: el único límite es el disco del ordenador
+  const ILIMITADO = Number.MAX_SAFE_INTEGER;
+  const defaultQuota = options.quota || ILIMITADO;
   const db = openDatabase(dataDir);
+  if (!options.quota) db.prepare('UPDATE users SET quota = ? WHERE quota = ?').run(ILIMITADO, 15 * 1024 ** 3);
   const blobs = new BlobStore(path.join(dataDir, 'blobs'));
   const secretFile = path.join(dataDir, 'secret');
   if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, randomToken(48), { mode: 0o600 });
@@ -318,7 +321,25 @@ function createApp(options = {}) {
   }
 
   function meResponse(user) {
-    return { ...userSummary(user), google: !!user.google_sub, quota: user.quota, used: q.usage.get(user.id).used };
+    return { ...userSummary(user), google: !!user.google_sub, quota: user.quota >= ILIMITADO ? null : user.quota, used: q.usage.get(user.id).used };
+  }
+
+  const CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  /**
+   * La cuenta de ese correo. Si aún no existe, se crea «pendiente»: así se puede
+   * compartir con alguien o añadirlo de amigo antes de que entre por primera vez.
+   * Cuando entre con Google (o cree su cuenta con ese correo) ya lo tendrá todo.
+   */
+  function cuentaPorCorreo(email, nombre) {
+    const mail = String(email || '').trim().toLowerCase();
+    if (!CORREO.test(mail)) throw new HttpError(400, 'Correo electrónico no válido');
+    let u = q.userByEmail.get(mail);
+    if (u) return u;
+    const id = crypto.randomUUID();
+    q.insertUser.run(id, String(nombre || '').trim().slice(0, 80) || mail.split('@')[0], mail, hashPassword(randomToken()),
+      defaultQuota, COLORS[crypto.randomInt(COLORS.length)], Date.now());
+    db.prepare('UPDATE users SET pendiente = 1 WHERE id = ?').run(id);
+    return q.userById.get(id);
   }
 
   // ----- Autenticación -----
@@ -328,7 +349,11 @@ function createApp(options = {}) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) throw new HttpError(400, 'Correo electrónico no válido');
     if (String(password || '').length < 8) throw new HttpError(400, 'La contraseña debe tener al menos 8 caracteres');
     const displayName = String(name || '').trim() || mail.split('@')[0];
-    if (q.userByEmail.get(mail)) throw new HttpError(409, 'Ya existe una cuenta con ese correo');
+    const existente = q.userByEmail.get(mail);
+    // Una cuenta «pendiente» (alguien compartió con ese correo) solo la reclama quien demuestra
+    // que el correo es suyo: entrando con Google
+    if (existente && existente.pendiente) throw new HttpError(409, 'Ya te han compartido cosas con este correo: entra con «Continuar con Google» para verlas');
+    if (existente) throw new HttpError(409, 'Ya existe una cuenta con ese correo');
     const id = crypto.randomUUID();
     q.insertUser.run(id, displayName.slice(0, 80), mail, hashPassword(password), defaultQuota,
       COLORS[crypto.randomInt(COLORS.length)], Date.now());
@@ -364,9 +389,12 @@ function createApp(options = {}) {
 
   // ----- Emparejar este ordenador con tus móviles (Syncthing) -----
   const conSyncthing = (req, res, next) => {
-    if (!st || !st.miId) return next(new HttpError(503, 'La sincronización con móviles no está activa en este ordenador'));
+    if (!st) return next(new HttpError(503, 'La sincronización con móviles no está activa en este ordenador'));
+    if (!st.miId) return next(new HttpError(503, st.ultimoError ? `Syncthing no ha arrancado: ${st.ultimoError}` : 'Syncthing está arrancando… Espera unos segundos.'));
     next();
   };
+  // Lo último que ha dicho Syncthing, para saber qué pasa si no funciona
+  app.get('/api/emparejar/registro', auth, (req, res) => res.json({ lineas: st ? st.lineas : [], error: st ? st.ultimoError : null }));
   // El código lo ve quien ha entrado en este ordenador; el móvil lo escribe al emparejarse
   app.get('/api/emparejar/codigo', auth, conSyncthing, (req, res) => res.json({ codigo: st.codigo, id: st.miId }));
   app.post('/api/emparejar/codigo', auth, conSyncthing, (req, res) => { st.nuevoCodigo(); res.json({ codigo: st.codigo }); });
@@ -391,6 +419,9 @@ function createApp(options = {}) {
     if (user) {
       // Una cuenta de correo y contraseña con el mismo correo queda unida a Google
       db.prepare('UPDATE users SET google_sub = ?, foto = COALESCE(?, foto) WHERE id = ?').run(datos.sub, datos.picture || null, user.id);
+      if (user.pendiente) {
+        db.prepare('UPDATE users SET pendiente = 0, name = ? WHERE id = ?').run(String(datos.name || user.name).slice(0, 80), user.id);
+      }
     } else {
       const id = crypto.randomUUID();
       q.insertUser.run(id, String(datos.name || mail.split('@')[0]).slice(0, 80), mail, hashPassword(randomToken()),
@@ -731,14 +762,71 @@ function createApp(options = {}) {
   app.post('/api/nodes/:id/shares', auth, wrap((req, res) => {
     const { node } = requireNode(req.user, req.params.id, 'owner');
     const role = req.body.role === 'editor' ? 'editor' : 'viewer';
-    const target = q.userByEmail.get(String(req.body.email || '').trim().toLowerCase());
-    if (!target) throw new HttpError(404, 'No hay ninguna cuenta de Nuvora con ese correo');
+    const target = cuentaPorCorreo(req.body.email);
     if (target.id === node.owner_id) throw new HttpError(400, 'No puedes compartir contigo mismo');
     db.prepare(`INSERT INTO shares (id, node_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (node_id, user_id) DO UPDATE SET role = excluded.role`).run(crypto.randomUUID(), node.id, target.id, role, Date.now());
     changed(node, 'share');
     for (const r of listeners.get(target.id) || []) r.write(`data: ${JSON.stringify({ type: 'shared', nodeId: node.id, by: req.user.name, name: node.name })}\n\n`);
-    res.status(201).json({ ok: true });
+    hacerAmigos(req.user.id, target.id);
+    res.status(201).json({ ok: true, pendiente: !!target.pendiente });
+  }));
+
+  // ----- Amigos: las personas con las que compartes -----
+  function hacerAmigos(a, b) {
+    if (a === b) return;
+    const ins = db.prepare('INSERT OR IGNORE INTO amigos (user_id, amigo_id, created_at) VALUES (?, ?, ?)');
+    ins.run(a, b, Date.now());
+    ins.run(b, a, Date.now());
+  }
+
+  function amigoJson(u, yo) {
+    const n = (sql) => db.prepare(sql).get(u.id, yo).n;
+    return {
+      ...userSummary(u),
+      pendiente: !!u.pendiente,
+      conmigo: n(`SELECT COUNT(*) AS n FROM shares s JOIN nodes x ON x.id = s.node_id WHERE x.owner_id = ? AND s.user_id = ? AND x.trashed_at IS NULL`),
+      porMi: db.prepare(`SELECT COUNT(*) AS n FROM shares s JOIN nodes x ON x.id = s.node_id WHERE x.owner_id = ? AND s.user_id = ? AND x.trashed_at IS NULL`).get(yo, u.id).n,
+    };
+  }
+
+  app.get('/api/amigos', auth, wrap((req, res) => {
+    const rows = db.prepare(`SELECT u.* FROM amigos a JOIN users u ON u.id = a.amigo_id WHERE a.user_id = ?
+      ORDER BY u.pendiente, u.name COLLATE NOCASE`).all(req.user.id);
+    res.json({ amigos: rows.map((u) => amigoJson(u, req.user.id)) });
+  }));
+
+  app.post('/api/amigos', auth, wrap((req, res) => {
+    const u = cuentaPorCorreo(req.body && req.body.email, req.body && req.body.name);
+    if (u.id === req.user.id) throw new HttpError(400, 'Ese correo es el tuyo');
+    hacerAmigos(req.user.id, u.id);
+    for (const r of listeners.get(u.id) || []) r.write(`data: ${JSON.stringify({ type: 'amigo', by: req.user.name })}\n\n`);
+    res.status(201).json({ amigo: amigoJson(q.userById.get(u.id), req.user.id) });
+  }));
+
+  // Qué correos de tus contactos ya usan Nuvora
+  app.post('/api/amigos/buscar', auth, wrap((req, res) => {
+    const correos = [...new Set((Array.isArray(req.body && req.body.emails) ? req.body.emails : [])
+      .map((e) => String(e).trim().toLowerCase()).filter((e) => CORREO.test(e)))].slice(0, 500);
+    const st = db.prepare('SELECT * FROM users WHERE email = ? AND pendiente = 0');
+    res.json({ usuarios: correos.map((e) => st.get(e)).filter((u) => u && u.id !== req.user.id).map(userSummary) });
+  }));
+
+  app.delete('/api/amigos/:id', auth, wrap((req, res) => {
+    db.prepare('DELETE FROM amigos WHERE user_id = ? AND amigo_id = ?').run(req.user.id, req.params.id);
+    res.json({ ok: true });
+  }));
+
+  // Lo que un amigo comparte contigo y lo que tú compartes con él
+  app.get('/api/amigos/:id/compartido', auth, wrap((req, res) => {
+    const amigo = db.prepare('SELECT u.* FROM amigos a JOIN users u ON u.id = a.amigo_id WHERE a.user_id = ? AND a.amigo_id = ?')
+      .get(req.user.id, req.params.id);
+    if (!amigo) throw new HttpError(404, 'No es tu amigo');
+    const sql = `SELECT n.*, s.role AS share_role FROM shares s JOIN nodes n ON n.id = s.node_id
+      WHERE n.owner_id = ? AND s.user_id = ? AND n.trashed_at IS NULL ORDER BY s.created_at DESC`;
+    const conmigo = db.prepare(sql).all(amigo.id, req.user.id).map((n) => serialize(n, req.user, { role: n.share_role }));
+    const porMi = db.prepare(sql).all(req.user.id, amigo.id).map((n) => serialize(n, req.user, { compartidoComo: n.share_role }));
+    res.json({ amigo: amigoJson(amigo, req.user.id), conmigo, porMi });
   }));
 
   app.delete('/api/shares/:id', auth, wrap((req, res) => {

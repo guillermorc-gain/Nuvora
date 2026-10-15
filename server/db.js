@@ -88,7 +88,15 @@ function openDatabase(dataDir) {
   const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   if (!cols.has('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT');
   if (!cols.has('foto')) db.exec('ALTER TABLE users ADD COLUMN foto TEXT');
+  // Cuenta creada al compartir o al añadir de amigo a alguien que aún no ha entrado en Nuvora
+  if (!cols.has('pendiente')) db.exec('ALTER TABLE users ADD COLUMN pendiente INTEGER NOT NULL DEFAULT 0');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub)');
+  db.exec(`CREATE TABLE IF NOT EXISTS amigos (
+      user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amigo_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  INTEGER NOT NULL,
+      PRIMARY KEY (user_id, amigo_id)
+    )`);
   return db;
 }
 

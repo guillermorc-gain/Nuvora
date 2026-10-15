@@ -200,6 +200,7 @@ private fun PantallaPrincipal(usuario: FirebaseUser, onSalir: () -> Unit) {
     var pestana by rememberSaveable { mutableIntStateOf(0) }
     val avisos = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(usuario.uid) {
+        Destacados.cargar(context)
         if (Build.VERSION.SDK_INT >= 33) avisos.launch(Manifest.permission.POST_NOTIFICATIONS)
         SincronizacionService.arrancar(context)
         // ¿Hay una versión nueva en GitHub? Se avisa y se actualiza sin salir

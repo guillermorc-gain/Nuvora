@@ -19,12 +19,12 @@ data class EnPapelera(val archivo: File, val ruta: String, val desdeOtro: Boolea
 object Papelera {
     private const val DIAS = 30L
 
-    private fun local(context: Context) =
-        File(context.getExternalFilesDir(null) ?: context.filesDir, "Papelera").apply { mkdirs() }
+    private fun local(context: Context) = File(Carpeta.base(context), "Papelera").apply { mkdirs() }
 
     private fun versiones(context: Context) = File(Carpeta.raiz(context), ".stversions")
 
-    private fun prefs(context: Context) = context.getSharedPreferences("papelera", Context.MODE_PRIVATE)
+    private fun prefs(context: Context) =
+        context.getSharedPreferences("papelera-" + (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""), Context.MODE_PRIVATE)
 
     /** Mueve a la papelera un archivo o una carpeta de Nuvora. */
     fun mover(context: Context, f: File): List<EnPapelera> {
@@ -110,7 +110,9 @@ object Destacados {
     var rutas by mutableStateOf<Set<String>>(emptySet())
         private set
 
-    private fun prefs(context: Context) = context.getSharedPreferences("destacados", Context.MODE_PRIVATE)
+    // Cada cuenta, sus destacados
+    private fun prefs(context: Context) =
+        context.getSharedPreferences("destacados-" + (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""), Context.MODE_PRIVATE)
 
     fun cargar(context: Context) { rutas = prefs(context).getStringSet("rutas", emptySet())!!.toSet() }
 

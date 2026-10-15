@@ -25,6 +25,9 @@ class SyncthingLocal {
     this.proceso = null;
     this.codigo = null;
     this.fallos = 0;
+    this.lineas = [];        // lo último que ha dicho Syncthing, para enseñarlo si algo falla
+    this.ultimoError = null;
+    this.reintentos = 0;
     fs.mkdirSync(home, { recursive: true });
     const claveArchivo = path.join(home, 'nuvora-apikey');
     if (!fs.existsSync(claveArchivo)) fs.writeFileSync(claveArchivo, crypto.randomBytes(24).toString('base64url'), { mode: 0o600 });
@@ -37,12 +40,30 @@ class SyncthingLocal {
     this.fallos = 0;
   }
 
+  apuntar(texto) {
+    this.log(texto);
+    for (const l of String(texto).split('\n')) if (l.trim()) this.lineas.push(l.trimEnd());
+    if (this.lineas.length > 60) this.lineas.splice(0, this.lineas.length - 60);
+  }
+
+  /** Un error que la web puede enseñar tal cual (503 y con lo que pasó). */
+  noDisponible(motivo) {
+    const err = new Error(`Syncthing no responde en este ordenador${motivo ? `: ${motivo}` : ''}. Se está reintentando solo.`);
+    err.status = 503;
+    return err;
+  }
+
   async peticion(metodo, ruta, cuerpo) {
-    const res = await fetch(this.base + ruta, {
+    let res;
+    try {
+      res = await fetch(this.base + ruta, {
       method: metodo,
       headers: { 'X-API-Key': this.apiKey, ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) },
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-    });
+      });
+    } catch (err) {
+      throw this.noDisponible(this.ultimoError || (err.cause && err.cause.code) || err.message);
+    }
     const texto = await res.text();
     if (!res.ok) throw new Error(`Syncthing ${metodo} ${ruta} → ${res.status} ${texto}`);
     return texto ? JSON.parse(texto) : null;
@@ -53,9 +74,19 @@ class SyncthingLocal {
       'serve', '--home', this.home, '--no-browser', '--no-restart', '--no-upgrade',
       '--gui-address', `127.0.0.1:${this.puerto}`, '--gui-apikey', this.apiKey,
     ], { env: { ...process.env, STNOUPGRADE: '1', STNORESTART: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-    this.proceso.stdout.on('data', (d) => this.log(String(d)));
-    this.proceso.stderr.on('data', (d) => this.log(String(d)));
-    this.proceso.on('exit', (c) => { this.log(`Syncthing se cerró (${c})`); this.proceso = null; });
+    const proceso = this.proceso;
+    this.proceso.stdout.on('data', (d) => this.apuntar(String(d)));
+    this.proceso.stderr.on('data', (d) => this.apuntar(String(d)));
+    this.proceso.on('error', (err) => { this.ultimoError = `no se pudo ejecutar (${err.code || err.message})`; this.apuntar(this.ultimoError); });
+    this.proceso.on('exit', (c, senal) => {
+      if (this.proceso === proceso) this.proceso = null;
+      if (this.parado) return;
+      this.ultimoError = `se cerró (${senal || `código ${c}`})`;
+      this.apuntar(`Syncthing ${this.ultimoError}`);
+      // Se vuelve a arrancar solo, cada vez un poco más tarde
+      const espera = Math.min(60, 2 ** Math.min(this.reintentos++, 6)) * 1000;
+      setTimeout(() => { if (!this.parado && !this.proceso) this.arrancar().catch((e) => this.apuntar(`No arrancó: ${e.message}`)); }, espera).unref();
+    });
     for (let i = 0; i < 120; i++) {
       try {
         const salud = await (await fetch(`${this.base}/rest/noauth/health`)).json();
@@ -64,6 +95,8 @@ class SyncthingLocal {
       await new Promise((r) => setTimeout(r, 500));
     }
     this.miId = (await this.peticion('GET', '/rest/system/status')).myID;
+    this.ultimoError = null;
+    this.reintentos = 0;
     const o = await this.peticion('GET', '/rest/config/options');
     Object.assign(o, {
       urAccepted: -1, urSeen: 3, startBrowser: false, crashReportingEnabled: false, autoUpgradeIntervalH: 0,
@@ -144,6 +177,7 @@ class SyncthingLocal {
   }
 
   parar() {
+    this.parado = true;
     if (this.proceso) this.proceso.kill();
   }
 }

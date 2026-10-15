@@ -78,11 +78,18 @@ object Sincronizador {
             st = s
             val miId = s.getJson("/rest/system/status").getString("myID")
             configurarOpciones(s)
-            Dispositivos.publicar(context, uid, miId)
+            // Si la nube falla, se sigue (con lo que ya conoce) y se reintenta; el motivo se ve en Dispositivos
+            try { Dispositivos.publicar(context, uid, miId) } catch (e: Exception) { Dispositivos.error.value = Dispositivos.explicar(e) }
             _estado.value = EstadoSync(activo = true, miId = miId)
 
             coroutineScope {
                 val todos = MutableStateFlow<List<Dispositivo>>(emptyList())
+                launch {
+                    while (Dispositivos.error.value != null) {
+                        delay(30_000)
+                        runCatching { Dispositivos.publicar(context, uid, miId) }
+                    }
+                }
                 launch {
                     Dispositivos.flujo(uid).collect { lista ->
                         todos.value = lista
@@ -114,7 +121,7 @@ object Sincronizador {
                             activo = true, miId = miId,
                             estadoCarpeta = estadoCarpeta.optString("state"),
                             pendientes = estadoCarpeta.optLong("needFiles", 0),
-                            otros = otros, pausada = pausar,
+                            otros = otros, pausada = pausar, error = Dispositivos.error.value,
                         )
                     }
                     delay(4000)
