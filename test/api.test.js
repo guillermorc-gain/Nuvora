@@ -69,6 +69,12 @@ test('registro, inicio de sesión y protección CSRF', async () => {
   assert.equal(bad.status, 401);
 });
 
+test('sin google-services.json, Google queda desactivado', async () => {
+  assert.equal((await (await fetch(`${base}/api/config`)).json()).googleClientId, null);
+  const r = await fetch(`${base}/api/auth/google`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"credential":"a.b.c"}' });
+  assert.equal(r.status, 503);
+});
+
 test('carpetas, subidas, renombrar, mover, papelera', async () => {
   const folder = (await call(ana, 'POST', '/api/folders', { name: 'Fotos' })).body;
   const up = await upload(ana, [['hola.txt', 'hola mundo'], ['viaje/playa.txt', 'arena']], folder.id);

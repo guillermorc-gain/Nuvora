@@ -19,4 +19,7 @@ app.listen(port, host, () => {
     }
   }
   console.log(`   Datos en: ${dataDir}`);
+  if (!process.env.NUVORA_GOOGLE_CLIENT_ID && !require('./google').clienteWebDeGoogleServices()) {
+    console.log('   Google: sin configurar (falta google-services.json del proyecto de Firebase «Nuvora»)');
+  }
 });

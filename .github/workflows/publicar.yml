@@ -66,6 +66,8 @@ jobs:
           rm -rf dist && mkdir -p dist/Nuvora
           cp -r server public sync scripts package.json package-lock.json README.md dist/Nuvora/
           cp -r node_modules dist/Nuvora/
+          # El servidor saca de aquí el ID de Google (proyecto de Firebase «Nuvora»)
+          if [ -f android/app/google-services.json ]; then cp android/app/google-services.json dist/Nuvora/; fi
           cd dist && zip -qr Nuvora.zip Nuvora && ls -la Nuvora.zip
 
       - name: Novedades

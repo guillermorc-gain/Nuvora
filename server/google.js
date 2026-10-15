@@ -3,16 +3,33 @@
 // sin dependencias: se comprueban la firma con las claves públicas de Google,
 // el emisor, el destinatario (nuestro ID de cliente) y la caducidad.
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 const ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com']);
 
-// Cliente web del proyecto de Firebase de Memories: así Nuvora y Memories
-// comparten las mismas cuentas de Google. Se puede cambiar con NUVORA_GOOGLE_CLIENT_ID.
-const CLIENTE_MEMORIES = '920678667813-ucrbu5sc7lh2gtef4rbor7sa63tampbo.apps.googleusercontent.com';
+// El ID del cliente web sale del google-services.json del proyecto de Firebase
+// «Nuvora» (el mismo archivo que usa la app de Android), o de NUVORA_GOOGLE_CLIENT_ID.
+const RUTAS_GOOGLE_SERVICES = [
+  path.join(__dirname, '..', 'google-services.json'),
+  path.join(__dirname, '..', 'android', 'app', 'google-services.json'),
+];
+
+function clienteWebDeGoogleServices(rutas = RUTAS_GOOGLE_SERVICES) {
+  for (const ruta of rutas) {
+    try {
+      const datos = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+      for (const c of datos.client || []) {
+        for (const o of c.oauth_client || []) if (o.client_type === 3 && o.client_id) return o.client_id;
+      }
+    } catch { /* no existe o no es válido: se prueba el siguiente */ }
+  }
+  return null;
+}
 
 function createGoogleVerifier({ clientIds, fetchKeys } = {}) {
-  const audiences = new Set((clientIds && clientIds.length ? clientIds : [CLIENTE_MEMORIES]).filter(Boolean));
+  const audiences = new Set((clientIds && clientIds.length ? clientIds : [clienteWebDeGoogleServices()]).filter(Boolean));
   let cache = { keys: null, until: 0 };
 
   async function keys(force) {
@@ -35,6 +52,7 @@ function createGoogleVerifier({ clientIds, fetchKeys } = {}) {
   const b64 = (s) => Buffer.from(s, 'base64url');
 
   async function verify(token) {
+    if (!audiences.size) throw Object.assign(new Error('El inicio de sesión con Google no está configurado en este servidor'), { status: 503 });
     const parts = String(token || '').split('.');
     if (parts.length !== 3) throw new Error('Token de Google no válido');
     const header = JSON.parse(b64(parts[0]).toString('utf8'));
@@ -55,7 +73,7 @@ function createGoogleVerifier({ clientIds, fetchKeys } = {}) {
     return payload;
   }
 
-  return { verify, clientId: [...audiences][0] };
+  return { verify, clientId: [...audiences][0] || null };
 }
 
-module.exports = { createGoogleVerifier, CLIENTE_MEMORIES };
+module.exports = { createGoogleVerifier, clienteWebDeGoogleServices };

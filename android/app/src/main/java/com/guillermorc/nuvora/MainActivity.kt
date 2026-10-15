@@ -182,10 +182,15 @@ class MainActivity : Activity() {
 
     /**
      * «Iniciar sesión con Google» nativo (Credential Manager), con el cliente web del
-     * proyecto de Memories: el servidor Nuvora comprueba el token y abre la sesión.
+     * proyecto de Firebase «Nuvora»: el servidor Nuvora comprueba el token y abre la sesión.
      */
     private fun entrarConGoogle() {
-        val opcion = GetSignInWithGoogleOption.Builder(CLIENTE_WEB_GOOGLE).build()
+        val cliente = BuildConfig.GOOGLE_WEB_CLIENT_ID
+        if (cliente.isEmpty()) {
+            errorGoogle("Esta versión de la app se compiló sin google-services.json del proyecto Nuvora de Firebase. Entra con un código o con tu correo.")
+            return
+        }
+        val opcion = GetSignInWithGoogleOption.Builder(cliente).build()
         val peticion = GetCredentialRequest.Builder().addCredentialOption(opcion).build()
         CredentialManager.create(this).getCredentialAsync(this, peticion, CancellationSignal(), enPrincipal,
             object : CredentialManagerCallback<GetCredentialResponse, GetCredentialException> {
@@ -202,7 +207,7 @@ class MainActivity : Activity() {
                         is GetCredentialCancellationException -> {}
                         is NoCredentialException -> errorGoogle(
                             "Google no ha dejado entrar. Comprueba que hay una cuenta de Google en el móvil " +
-                                "y que la app Nuvora está registrada en Firebase (README → Iniciar sesión con Google)."
+                                "y que la app está registrada en el proyecto Nuvora de Firebase con su SHA-1 (README → Iniciar sesión con Google)."
                         )
                         else -> errorGoogle("No se pudo entrar con Google: ${e.message ?: e.type}")
                     }
@@ -336,8 +341,5 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ELEGIR_ARCHIVOS = 7
-
-        /** Cliente web de Google del proyecto Firebase de Memories (memories-99b01). */
-        private const val CLIENTE_WEB_GOOGLE = "920678667813-ucrbu5sc7lh2gtef4rbor7sa63tampbo.apps.googleusercontent.com"
     }
 }

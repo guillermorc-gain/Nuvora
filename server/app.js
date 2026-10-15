@@ -365,7 +365,7 @@ function createApp(options = {}) {
     try {
       datos = await google.verify(req.body && req.body.credential);
     } catch (err) {
-      throw new HttpError(401, err.message);
+      throw new HttpError(err.status || 401, err.message);
     }
     const mail = String(datos.email).toLowerCase();
     let user = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(datos.sub) || q.userByEmail.get(mail);
