@@ -11,7 +11,7 @@ let server, base, tmp;
 
 test.before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nuvora-test-'));
-  const app = createApp({ dataDir: path.join(tmp, 'data'), quota: 5 * 1024 * 1024 });
+  const app = createApp({ dataDir: path.join(tmp, 'data'), quota: 5 * 1024 * 1024, google: { clientIds: [] } });
   await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
   base = `http://127.0.0.1:${server.address().port}`;
 });

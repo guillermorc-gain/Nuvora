@@ -60,9 +60,8 @@ function createApp(options = {}) {
   const secretFile = path.join(dataDir, 'secret');
   if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, randomToken(48), { mode: 0o600 });
   const secret = fs.readFileSync(secretFile, 'utf8');
-  const google = createGoogleVerifier(options.google || {
-    clientIds: (process.env.NUVORA_GOOGLE_CLIENT_ID || '').split(',').map((x) => x.trim()).filter(Boolean),
-  });
+  const deEntorno = (process.env.NUVORA_GOOGLE_CLIENT_ID || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const google = createGoogleVerifier(options.google || { clientIds: deEntorno.length ? deEntorno : undefined });
 
   // ---------- Consultas preparadas ----------
   const q = {

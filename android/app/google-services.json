@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "575991000668",
+    "project_id": "nuvora-7af85",
+    "storage_bucket": "nuvora-7af85.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:575991000668:android:bd03c5f1e8208313654099",
+        "android_client_info": {
+          "package_name": "com.guillermorc.nuvora"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "575991000668-bc731dv60jrg87cj55irrfnb2vsvag3f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOGBv9NKc18asfj27E2aFzF51-6xjNj2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "575991000668-bc731dv60jrg87cj55irrfnb2vsvag3f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -29,7 +29,8 @@ function clienteWebDeGoogleServices(rutas = RUTAS_GOOGLE_SERVICES) {
 }
 
 function createGoogleVerifier({ clientIds, fetchKeys } = {}) {
-  const audiences = new Set((clientIds && clientIds.length ? clientIds : [clienteWebDeGoogleServices()]).filter(Boolean));
+  // clientIds explícito (aunque esté vacío) manda; si no, se busca google-services.json
+  const audiences = new Set((clientIds !== undefined ? clientIds : [clienteWebDeGoogleServices()]).filter(Boolean));
   let cache = { keys: null, until: 0 };
 
   async function keys(force) {
