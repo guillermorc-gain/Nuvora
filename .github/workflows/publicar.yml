@@ -1,0 +1,91 @@
+name: Publicar versión
+
+on:
+  push:
+    branches: [main, 'ccr-832ba140-viul7f']
+    # Lo que no cambia la app (el README, etc.) no crea versión nueva
+    paths:
+      - 'server/**'
+      - 'public/**'
+      - 'sync/**'
+      - 'test/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/publicar.yml'
+  # A mano: Actions → «Publicar versión» → Run workflow
+  workflow_dispatch:
+
+# Dos pushes seguidos se publican uno detrás de otro, nunca a la vez
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Todo el historial y las etiquetas: para numerar la versión y escribir las novedades
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Si las pruebas fallan no se publica nada
+      - run: npm test
+
+      - name: Número de versión
+        id: version
+        run: |
+          ULTIMA=$(git tag -l 'v0.*' | sed 's/^v0\.//' | sort -n | tail -1)
+          N=$(( ${ULTIMA:-0} + 1 ))
+          echo "tag=v0.$N" >> "$GITHUB_OUTPUT"
+          echo "anterior=${ULTIMA:+v0.$ULTIMA}" >> "$GITHUB_OUTPUT"
+          echo "Nueva versión: v0.$N"
+
+      # El ZIP ya lleva node_modules: se descomprime y se arranca con «npm start»
+      - name: Preparar el ZIP
+        run: |
+          V="${{ steps.version.outputs.tag }}"
+          npm version --no-git-tag-version --allow-same-version "${V#v}.0"
+          rm -rf dist && mkdir -p dist/Nuvora
+          cp -r server public sync package.json package-lock.json README.md dist/Nuvora/
+          cp -r node_modules dist/Nuvora/
+          cd dist && zip -qr Nuvora.zip Nuvora && ls -la Nuvora.zip
+
+      - name: Novedades
+        run: |
+          ANTERIOR="${{ steps.version.outputs.anterior }}"
+          RANGO=$([ -n "$ANTERIOR" ] && echo "$ANTERIOR..HEAD" || echo "HEAD")
+          {
+            echo "## Novedades"
+            echo
+            git log --no-merges --format='- %s' $RANGO | head -40
+            echo
+            echo "## Cómo usarla"
+            echo
+            echo "1. Descarga **Nuvora.zip** y descomprímelo."
+            echo "2. Con Node.js 22.13 o superior: \`cd Nuvora\` y \`npm start\`."
+            echo "3. Abre http://localhost:3000"
+          } > notas.md
+          cat notas.md
+
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ steps.version.outputs.tag }}"
+          gh release create "$V" dist/Nuvora.zip \
+            --target "${{ github.sha }}" \
+            --title "Nuvora $V" \
+            --notes-file notas.md \
+            --latest

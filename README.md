@@ -39,6 +39,15 @@ logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la inter
 - Almacenamiento direccionado por contenido: los archivos idénticos sólo ocupan espacio una vez.
 - Cuota por usuario (15 GB por defecto), contraseñas con *scrypt*, sesiones con cookie `HttpOnly` + protección CSRF, archivos HTML/SVG servidos como texto para evitar XSS.
 
+## Descargar
+
+**Última versión: <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip>**
+
+Cada cambio en la app se prueba y se publica automáticamente en
+[Releases](https://github.com/guillermorc-gain/Nuvora/releases) como `v0.1`, `v0.2`… (workflow
+`.github/workflows/publicar.yml`). El ZIP ya incluye las dependencias: descomprímelo, entra en
+`Nuvora` y ejecuta `npm start`.
+
 ## Puesta en marcha
 
 Requiere **Node.js 22.13 o superior** (usa el SQLite integrado en Node).
