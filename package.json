@@ -1,0 +1,24 @@
+{
+  "name": "nuvora",
+  "version": "1.0.0",
+  "description": "Nuvora — almacenamiento en la nube para guardar, compartir y sincronizar archivos",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "bin": {
+    "nuvora-sync": "sync/nuvora-sync.js"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "sync": "node sync/nuvora-sync.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "express": "^4.22.3"
+  }
+}

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nuvora</title>
+  <meta name="theme-color" content="#7C5CFF">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Pantalla de acceso -->
+  <section id="auth" class="auth hidden">
+    <div class="auth-card">
+      <div class="brand big"><img src="/icon.svg" alt=""><span>Nuvora</span></div>
+      <p class="muted">Tus archivos, videos y fotos en la nube. Compártelos y sincronízalos en todos tus dispositivos.</p>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-mode="login" role="tab">Iniciar sesión</button>
+        <button class="tab" data-mode="register" role="tab">Crear cuenta</button>
+      </div>
+      <form id="auth-form" autocomplete="on">
+        <label class="field register-only hidden"><span>Nombre</span><input name="name" autocomplete="name"></label>
+        <label class="field"><span>Correo electrónico</span><input name="email" type="email" required autocomplete="email"></label>
+        <label class="field"><span>Contraseña</span><input name="password" type="password" required minlength="8" autocomplete="current-password"></label>
+        <p id="auth-error" class="error hidden"></p>
+        <button class="btn primary wide" type="submit" id="auth-submit">Entrar</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Aplicación -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menú" data-icon="menu"></button>
+      <a class="brand" href="#/drive"><img src="/icon.svg" alt=""><span>Nuvora</span></a>
+      <div class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
+        <input id="search" type="search" placeholder="Buscar en Nuvora" autocomplete="off">
+      </div>
+      <div class="top-actions">
+        <span class="live" id="live" title="Sincronización en tiempo real"><i></i><span>En vivo</span></span>
+        <button class="icon-btn" id="theme-btn" title="Cambiar tema" aria-label="Cambiar tema" data-icon="moon"></button>
+        <button class="avatar" id="avatar-btn" aria-label="Cuenta"></button>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="new-wrap">
+        <button class="btn new-btn" id="new-btn"><span class="plus" data-icon="plus"></span> Nuevo</button>
+      </div>
+      <nav class="nav">
+        <a href="#/drive" data-view="drive"><span class="ni" data-icon="drive"></span>Mi unidad</a>
+        <a href="#/shared" data-view="shared"><span class="ni" data-icon="people"></span>Compartido conmigo</a>
+        <a href="#/shared-by-me" data-view="shared-by-me"><span class="ni" data-icon="link"></span>Compartido por mí</a>
+        <a href="#/recent" data-view="recent"><span class="ni" data-icon="clock"></span>Recientes</a>
+        <a href="#/starred" data-view="starred"><span class="ni" data-icon="star"></span>Destacados</a>
+        <a href="#/trash" data-view="trash"><span class="ni" data-icon="trash"></span>Papelera</a>
+        <a href="#/sync" data-view="sync"><span class="ni" data-icon="sync"></span>Sincronización</a>
+      </nav>
+      <div class="storage">
+        <div class="storage-bar"><i id="storage-fill"></i></div>
+        <p id="storage-text" class="muted small"></p>
+      </div>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="toolbar">
+        <nav class="crumbs" id="crumbs"></nav>
+        <div class="toolbar-actions">
+          <button class="btn ghost hidden" id="empty-trash">Vaciar papelera</button>
+          <div class="seg">
+            <button class="icon-btn" data-layout="grid" title="Cuadrícula" data-icon="grid"></button>
+            <button class="icon-btn" data-layout="list" title="Lista" data-icon="list"></button>
+          </div>
+        </div>
+      </div>
+      <div id="content" class="content"></div>
+      <div class="drop-hint" id="drop-hint"><div>Suelta los archivos para subirlos a <b id="drop-target">Mi unidad</b></div></div>
+    </main>
+  </div>
+
+  <!-- Menús, diálogos y paneles -->
+  <div id="menu" class="menu hidden" role="menu"></div>
+  <div id="modal-root"></div>
+  <div id="uploads" class="uploads hidden">
+    <header><span id="uploads-title">Subiendo</span><button class="icon-btn" id="uploads-close" aria-label="Cerrar" data-icon="close"></button></header>
+    <ul id="uploads-list"></ul>
+  </div>
+  <div id="toasts" class="toasts"></div>
+  <input type="file" id="file-input" multiple hidden>
+  <input type="file" id="folder-input" webkitdirectory multiple hidden>
+
+  <script src="/common.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,952 @@
+/* Nuvora — cliente web */
+'use strict';
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+const state = {
+  me: null,
+  view: 'drive',
+  folderId: null,
+  folder: null,
+  role: 'owner',
+  items: [],
+  selected: new Set(),
+  anchor: null,
+  layout: 'grid',
+  query: '',
+};
+try { state.layout = localStorage.getItem('nuvora-layout') || 'grid'; } catch { /* sin almacenamiento */ }
+
+const VIEW_TITLES = {
+  drive: 'Mi unidad', shared: 'Compartido conmigo', 'shared-by-me': 'Compartido por mí',
+  recent: 'Recientes', starred: 'Destacados', trash: 'Papelera', search: 'Resultados de búsqueda', sync: 'Sincronización',
+};
+
+// ---------- API ----------
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    credentials: 'same-origin',
+    headers: { 'X-Nuvora': '1', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+  if (res.status === 401 && !url.startsWith('/api/auth')) { showAuth(); throw new Error('Sesión caducada'); }
+  if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+  return data;
+}
+
+async function attempt(fn, okMsg) {
+  try {
+    const r = await fn();
+    if (okMsg) toast(okMsg);
+    return r;
+  } catch (err) {
+    toast(err.message, 'error');
+    return undefined;
+  }
+}
+
+const contentUrl = (item, download) => `/api/files/${item.id}/content${download ? '?download=1' : ''}`;
+
+// ---------- Iconos estáticos ----------
+for (const el of $$('[data-icon]')) el.innerHTML = icon(el.dataset.icon);
+
+// ---------- Acceso ----------
+let authMode = 'login';
+function showAuth() {
+  $('#app').classList.add('hidden');
+  $('#auth').classList.remove('hidden');
+}
+$$('.tab').forEach((t) => t.addEventListener('click', () => {
+  authMode = t.dataset.mode;
+  $$('.tab').forEach((x) => x.classList.toggle('active', x === t));
+  $$('.register-only').forEach((x) => x.classList.toggle('hidden', authMode !== 'register'));
+  $('#auth-submit').textContent = authMode === 'login' ? 'Entrar' : 'Crear cuenta';
+  $('#auth-form [name=password]').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+  $('#auth-error').classList.add('hidden');
+}));
+$('#auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const btn = $('#auth-submit');
+  btn.disabled = true;
+  try {
+    const data = await api('POST', `/api/auth/${authMode}`, Object.fromEntries(f));
+    state.me = data.user;
+    e.target.reset();
+    startApp();
+  } catch (err) {
+    const box = $('#auth-error');
+    box.textContent = err.message;
+    box.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- Arranque ----------
+async function boot() {
+  try {
+    state.me = await api('GET', '/api/me');
+    startApp();
+  } catch {
+    showAuth();
+  }
+}
+
+let started = false;
+function startApp() {
+  $('#auth').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  renderAccount();
+  if (!started) {
+    started = true;
+    window.addEventListener('hashchange', route);
+    connectEvents();
+  }
+  route();
+}
+
+function renderAccount() {
+  const me = state.me;
+  const av = $('#avatar-btn');
+  av.textContent = (me.name || me.email)[0].toUpperCase();
+  av.style.background = me.color;
+  const pct = Math.min(100, (me.used / me.quota) * 100);
+  $('#storage-fill').style.width = `${Math.max(pct, me.used ? 1 : 0)}%`;
+  $('#storage-text').textContent = `${formatSize(me.used)} de ${formatSize(me.quota)} usados`;
+}
+
+async function refreshMe() {
+  try { state.me = await api('GET', '/api/me'); renderAccount(); } catch { /* ignorado */ }
+}
+
+// ---------- Tiempo real ----------
+let refreshTimer = null;
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => $('#live').classList.add('on');
+  es.onerror = () => $('#live').classList.remove('on');
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'shared') toast(`${msg.by} compartió «${msg.name}» contigo`);
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => { if (state.view !== 'sync') load(true); refreshMe(); }, 250);
+  };
+}
+
+// ---------- Rutas ----------
+function route() {
+  const hash = location.hash.replace(/^#\/?/, '') || 'drive';
+  const [view, arg] = hash.split('/');
+  state.view = VIEW_TITLES[view] ? view : 'drive';
+  state.folderId = state.view === 'drive' && arg ? arg : null;
+  if (state.view === 'search') state.query = decodeURIComponent(arg || '');
+  else $('#search').value = '';
+  state.selected.clear();
+  $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === state.view));
+  $('#sidebar').classList.remove('open');
+  load();
+}
+
+function go(view, arg) {
+  const h = `#/${view}${arg ? `/${encodeURIComponent(arg)}` : ''}`;
+  if (location.hash === h) route(); else location.hash = h;
+}
+
+async function load(silent) {
+  const content = $('#content');
+  $('#empty-trash').classList.toggle('hidden', state.view !== 'trash');
+  if (state.view === 'sync') { renderCrumbs(); renderSync(); return; }
+  if (!silent) content.innerHTML = '<div class="empty"><p>Cargando…</p></div>';
+  try {
+    let data;
+    if (state.view === 'drive') {
+      data = await api('GET', `/api/nodes?parent=${state.folderId || 'root'}`);
+      state.folder = data.folder;
+      state.role = data.role;
+      state.crumbs = data.breadcrumbs;
+    } else if (state.view === 'search') {
+      data = await api('GET', `/api/search?q=${encodeURIComponent(state.query)}`);
+      state.folder = null; state.role = 'owner';
+    } else {
+      data = await api('GET', `/api/views/${state.view}`);
+      state.folder = null; state.role = 'owner';
+    }
+    // Evita volver a pintar (y cortar un doble clic o recargar miniaturas) si nada cambió
+    const signature = JSON.stringify([state.view, state.folderId, state.query, data.items]);
+    if (silent && signature === state.signature) return;
+    state.signature = signature;
+    state.items = data.items;
+    for (const id of [...state.selected]) if (!state.items.some((i) => i.id === id)) state.selected.delete(id);
+    renderCrumbs();
+    render();
+  } catch (err) {
+    if (state.view === 'drive' && state.folderId) { toast(err.message, 'error'); go('drive'); return; }
+    content.innerHTML = `<div class="empty"><h3>No se pudo cargar</h3><p>${esc(err.message)}</p></div>`;
+  }
+}
+
+function canEditHere() {
+  return state.view === 'drive' && (state.role === 'owner' || state.role === 'editor');
+}
+
+function renderCrumbs() {
+  const el = $('#crumbs');
+  if (state.view === 'drive' && state.folder) {
+    const sharedRoot = state.folder.owner && state.crumbs.length;
+    const parts = [sharedRoot ? `<a href="#/shared">Compartido conmigo</a>` : `<a href="#/drive">Mi unidad</a>`];
+    state.crumbs.forEach((c, i) => {
+      parts.push(icon('chevron'));
+      parts.push(i === state.crumbs.length - 1 ? `<span>${esc(c.name)}</span>` : `<a href="#/drive/${c.id}" data-drop="${c.id}">${esc(c.name)}</a>`);
+    });
+    el.innerHTML = parts.join('');
+  } else if (state.view === 'search') {
+    el.innerHTML = `<span>Resultados para «${esc(state.query)}»</span>`;
+  } else {
+    el.innerHTML = `<span data-drop="${state.view === 'drive' ? 'root' : ''}">${VIEW_TITLES[state.view]}</span>`;
+  }
+  $$('[data-layout]').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
+}
+
+// ---------- Renderizado ----------
+const EMPTY = {
+  drive: ['Arrastra archivos aquí', 'O usa el botón «Nuevo» para subir archivos y carpetas.'],
+  shared: ['Nada compartido todavía', 'Los archivos que otras personas compartan contigo aparecerán aquí.'],
+  'shared-by-me': ['No has compartido nada', 'Comparte con personas o crea enlaces públicos desde el menú de cada archivo.'],
+  recent: ['Sin actividad reciente', 'Los archivos que subas o modifiques aparecerán aquí.'],
+  starred: ['Sin destacados', 'Marca con una estrella lo que quieras tener a mano.'],
+  trash: ['La papelera está vacía', 'Los elementos eliminados se guardan aquí hasta que vacíes la papelera.'],
+  search: ['Sin resultados', 'Prueba con otras palabras.'],
+};
+
+const EMPTY_ART = `<svg class="art" viewBox="0 0 180 140" aria-hidden="true">
+  <defs><linearGradient id="eg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs>
+  <ellipse cx="90" cy="124" rx="62" ry="8" fill="currentColor" opacity=".08"/>
+  <path d="M52 100h76a22 22 0 0 0 2-43.9A30 30 0 0 0 73 61a19 19 0 0 0-21 39z" fill="url(#eg)" opacity=".9"/>
+  <path d="M90 92V68m0 0-10 10m10-10 10 10" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+function itemLabel(it) {
+  if (state.view === 'trash') return `En la papelera · ${formatDate(it.trashedAt)}`;
+  if (it.owner) return `De ${it.owner.name}`;
+  return it.type === 'folder' ? formatDate(it.updatedAt) : `${formatSize(it.size)} · ${formatDate(it.updatedAt)}`;
+}
+
+function thumbHtml(it) {
+  const k = fileKind(it);
+  if (k.kind === 'image' && !/heic|tiff/.test(it.mime)) return `<img loading="lazy" src="${contentUrl(it)}" alt="">`;
+  if (k.kind === 'video') {
+    return `<video preload="metadata" muted src="${contentUrl(it)}#t=0.5"></video><span class="play"><svg class="ico" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>`;
+  }
+  return `<svg class="ico big-ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>`;
+}
+
+function render() {
+  const content = $('#content');
+  const items = state.items;
+  if (!items.length) {
+    const [h, p] = EMPTY[state.view] || EMPTY.drive;
+    content.innerHTML = `<div class="empty">${EMPTY_ART}<h3>${h}</h3><p>${p}</p></div>`;
+    return;
+  }
+  if (state.layout === 'list') {
+    content.innerHTML = `<table class="list"><thead><tr>
+      <th>Nombre</th><th class="col-hide">${state.view === 'shared' ? 'Compartido por' : 'Propietario'}</th>
+      <th class="col-hide">${state.view === 'trash' ? 'Eliminado' : 'Modificado'}</th><th class="col-hide">Tamaño</th><th></th>
+    </tr></thead><tbody>${items.map((it) => {
+      const k = fileKind(it);
+      return `<tr class="item" data-id="${it.id}" draggable="${canDrag(it)}" ${it.type === 'folder' ? `data-drop="${it.id}"` : ''}>
+        <td><div class="namecell"><svg class="ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>
+          <span>${esc(it.name)}</span>${it.shared ? `<span class="badge-shared" title="Compartido">${icon('people')}</span>` : ''}
+          ${it.starred ? `<span class="badge-shared" title="Destacado">${icon('star')}</span>` : ''}</div>
+          ${it.path ? `<div class="muted small">${esc(it.path)}</div>` : ''}</td>
+        <td class="col-hide">${it.owner ? esc(it.owner.name) : 'yo'}</td>
+        <td class="col-hide">${formatDate(state.view === 'trash' ? it.trashedAt : it.updatedAt)}</td>
+        <td class="col-hide">${it.type === 'folder' ? '—' : formatSize(it.size)}</td>
+        <td style="width:40px"><button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  } else {
+    const folders = items.filter((i) => i.type === 'folder');
+    const files = items.filter((i) => i.type === 'file');
+    let html = '';
+    if (folders.length) {
+      html += `<div class="section-title">Carpetas</div><div class="grid folders">${folders.map((it) => `
+        <div class="card folder" data-id="${it.id}" data-drop="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
+          <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:var(--c-folder);fill:var(--c-folder);fill-opacity:.25">${ICONS.folder}</svg>
+            <span class="name">${esc(it.name)}</span>
+            ${it.shared ? `<span class="badge-shared">${icon('people')}</span>` : ''}
+            <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
+        </div>`).join('')}</div>`;
+    }
+    if (files.length) {
+      html += `<div class="section-title">Archivos</div><div class="grid files">${files.map((it) => {
+        const k = fileKind(it);
+        return `<div class="card file" data-id="${it.id}" draggable="${canDrag(it)}" title="${esc(it.name)}">
+          <div class="row"><svg class="ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>
+            <span class="name">${esc(it.name)}</span>
+            <button class="icon-btn" data-more aria-label="Más acciones">${icon('more')}</button></div>
+          <div class="thumb">${thumbHtml(it)}</div>
+          <div class="muted small" style="padding:0 14px 10px;margin-top:-4px">${esc(itemLabel(it))}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+    content.innerHTML = html;
+  }
+  paintSelection();
+}
+
+function canDrag(it) {
+  return state.view !== 'trash' && !it.owner;
+}
+
+function paintSelection() {
+  $$('[data-id]', $('#content')).forEach((el) => el.classList.toggle('selected', state.selected.has(el.dataset.id)));
+}
+
+const byId = (id) => state.items.find((i) => i.id === id);
+const selectedItems = () => state.items.filter((i) => state.selected.has(i.id));
+
+// ---------- Interacción con elementos ----------
+const contentEl = $('#content');
+
+contentEl.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-id]');
+  if (!el) { state.selected.clear(); paintSelection(); return; }
+  const id = el.dataset.id;
+  if (e.target.closest('[data-more]')) {
+    if (!state.selected.has(id)) { state.selected = new Set([id]); paintSelection(); }
+    const r = e.target.closest('[data-more]').getBoundingClientRect();
+    showItemMenu(r.right, r.bottom);
+    return;
+  }
+  if (e.shiftKey && state.anchor) {
+    const ids = state.items.map((i) => i.id);
+    const [a, b] = [ids.indexOf(state.anchor), ids.indexOf(id)].sort((x, y) => x - y);
+    state.selected = new Set(ids.slice(a, b + 1));
+  } else if (e.ctrlKey || e.metaKey) {
+    state.selected.has(id) ? state.selected.delete(id) : state.selected.add(id);
+    state.anchor = id;
+  } else {
+    // En pantallas táctiles un toque abre directamente
+    if (matchMedia('(hover: none)').matches) { openItem(byId(id)); return; }
+    state.selected = new Set([id]);
+    state.anchor = id;
+  }
+  paintSelection();
+});
+
+contentEl.addEventListener('dblclick', (e) => {
+  const el = e.target.closest('[data-id]');
+  if (el && !e.target.closest('[data-more]')) openItem(byId(el.dataset.id));
+});
+
+contentEl.addEventListener('contextmenu', (e) => {
+  const el = e.target.closest('[data-id]');
+  e.preventDefault();
+  if (!el) { if (canEditHere()) showNewMenu(e.clientX, e.clientY); return; }
+  if (!state.selected.has(el.dataset.id)) { state.selected = new Set([el.dataset.id]); paintSelection(); }
+  showItemMenu(e.clientX, e.clientY);
+});
+
+function openItem(it) {
+  if (!it) return;
+  if (state.view === 'trash') { toast('Restaura el elemento para abrirlo'); return; }
+  if (it.type === 'folder') go('drive', it.id);
+  else openViewer(it);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea, select') || $('.modal-wrap') || $('.viewer')) return;
+  const sel = selectedItems();
+  if (e.key === 'Escape') { state.selected.clear(); paintSelection(); hideMenu(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); state.selected = new Set(state.items.map((i) => i.id)); paintSelection(); }
+  else if (!sel.length) return;
+  else if (e.key === 'Enter' && sel.length === 1) openItem(sel[0]);
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); state.view === 'trash' ? deleteForever(sel) : trashItems(sel); }
+  else if (e.key === 'F2' && sel.length === 1) renameItem(sel[0]);
+});
+
+// ---------- Menús ----------
+const menuEl = $('#menu');
+function showMenu(x, y, entries) {
+  menuEl.innerHTML = entries.map((en, i) => en === '-' ? '<hr>'
+    : en.html ? en.html
+    : `<button data-i="${i}" class="${en.danger ? 'danger' : ''}">${icon(en.icon)}<span>${esc(en.label)}</span></button>`).join('');
+  menuEl.classList.remove('hidden');
+  const { innerWidth: W, innerHeight: H } = window;
+  const r = menuEl.getBoundingClientRect();
+  menuEl.style.left = `${Math.max(8, Math.min(x, W - r.width - 8))}px`;
+  menuEl.style.top = `${Math.max(8, y + r.height > H - 8 ? y - r.height : y)}px`;
+  menuEl.onclick = (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (!b) return;
+    hideMenu();
+    entries[b.dataset.i].action();
+  };
+}
+function hideMenu() { menuEl.classList.add('hidden'); }
+document.addEventListener('mousedown', (e) => { if (!menuEl.contains(e.target)) hideMenu(); });
+window.addEventListener('resize', hideMenu);
+contentEl.addEventListener('scroll', hideMenu);
+
+function showItemMenu(x, y) {
+  const sel = selectedItems();
+  if (!sel.length) return;
+  const one = sel.length === 1 ? sel[0] : null;
+  const mine = sel.every((i) => !i.owner);
+  const entries = [];
+  if (state.view === 'trash') {
+    entries.push({ icon: 'restore', label: 'Restaurar', action: () => restoreItems(sel) });
+    entries.push({ icon: 'trash', label: 'Eliminar definitivamente', danger: true, action: () => deleteForever(sel) });
+    return showMenu(x, y, entries);
+  }
+  if (one) {
+    entries.push({ icon: one.type === 'folder' ? 'folder' : 'eye', label: one.type === 'folder' ? 'Abrir' : 'Vista previa', action: () => openItem(one) });
+  }
+  entries.push({ icon: 'download', label: sel.length > 1 ? `Descargar (${sel.length})` : one.type === 'folder' ? 'Descargar como ZIP' : 'Descargar', action: () => sel.forEach(download) });
+  entries.push('-');
+  if (one && mine) {
+    entries.push({ icon: 'share', label: 'Compartir', action: () => shareDialog(one) });
+    entries.push({ icon: 'link', label: 'Copiar enlace público', action: () => quickLink(one) });
+  }
+  if (one && (mine || state.role === 'editor')) entries.push({ icon: 'edit', label: 'Cambiar nombre', action: () => renameItem(one) });
+  if (mine) {
+    entries.push({ icon: 'move', label: 'Mover a…', action: () => moveDialog(sel) });
+    const allStarred = sel.every((i) => i.starred);
+    entries.push({ icon: 'star', label: allStarred ? 'Quitar de destacados' : 'Añadir a destacados', action: () => starItems(sel, !allStarred) });
+  }
+  if (one) entries.push({ icon: 'copy', label: 'Hacer una copia', action: () => copyItem(one) });
+  if (one) entries.push({ icon: 'info', label: 'Detalles', action: () => detailsDialog(one) });
+  if (mine) {
+    entries.push('-');
+    entries.push({ icon: 'trash', label: 'Mover a la papelera', danger: true, action: () => trashItems(sel) });
+  }
+  if (state.view === 'shared' && one && one.role) {
+    entries.push('-');
+    entries.push({ icon: 'logout', label: 'Quitar de mi lista', action: () => leaveShare(one) });
+  }
+  showMenu(x, y, entries);
+}
+
+function showNewMenu(x, y) {
+  showMenu(x, y, [
+    { icon: 'folderPlus', label: 'Nueva carpeta', action: newFolder },
+    '-',
+    { icon: 'upload', label: 'Subir archivos', action: () => $('#file-input').click() },
+    { icon: 'folderUp', label: 'Subir carpeta', action: () => $('#folder-input').click() },
+  ]);
+}
+
+$('#new-btn').addEventListener('click', (e) => {
+  if (!canEditHere()) { go('drive'); setTimeout(() => showNewMenu(e.clientX, e.clientY), 120); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  showNewMenu(r.left, r.bottom + 6);
+});
+
+$('#avatar-btn').addEventListener('click', (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const me = state.me;
+  showMenu(r.right - 260, r.bottom + 8, [
+    { html: `<div class="menu-head"><b>${esc(me.name)}</b><span class="muted small">${esc(me.email)}</span><br>
+      <span class="muted small">${formatSize(me.used)} de ${formatSize(me.quota)}</span></div>` },
+    '-',
+    { icon: 'sync', label: 'Sincronizar mi equipo', action: () => go('sync') },
+    { icon: 'moon', label: 'Cambiar tema', action: toggleTheme },
+    { icon: 'logout', label: 'Cerrar sesión', action: logout },
+  ]);
+});
+
+async function logout() {
+  await attempt(() => api('POST', '/api/auth/logout'));
+  location.hash = '';
+  location.reload();
+}
+
+$('#theme-btn').addEventListener('click', toggleTheme);
+$('#menu-btn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$$('[data-layout]').forEach((b) => b.addEventListener('click', () => {
+  state.layout = b.dataset.layout;
+  state.signature = null;
+  try { localStorage.setItem('nuvora-layout', state.layout); } catch { /* sin almacenamiento */ }
+  renderCrumbs();
+  render();
+}));
+$('#empty-trash').addEventListener('click', () => {
+  openModal({
+    title: '¿Vaciar la papelera?',
+    body: '<p>Todos los elementos de la papelera se eliminarán para siempre. Esta acción no se puede deshacer.</p>',
+    actions: [{ label: 'Cancelar' }, { label: 'Vaciar papelera', danger: true, onClick: async () => {
+      await attempt(() => api('DELETE', '/api/trash'), 'Papelera vaciada');
+      load(); refreshMe();
+    } }],
+  });
+});
+
+let searchTimer;
+$('#search').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  const v = e.target.value.trim();
+  searchTimer = setTimeout(() => { if (v) go('search', v); else if (state.view === 'search') go('drive'); }, 300);
+});
+
+// ---------- Acciones ----------
+function download(it) {
+  const a = document.createElement('a');
+  a.href = contentUrl(it, true);
+  a.download = it.type === 'folder' ? `${it.name}.zip` : it.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function newFolder() {
+  openModal({
+    title: 'Nueva carpeta',
+    body: '<input id="folder-name" value="Carpeta sin título">',
+    actions: [{ label: 'Cancelar' }, { label: 'Crear', primary: true, onClick: async (w) => {
+      const name = $('#folder-name', w).value.trim();
+      if (!name) return false;
+      await attempt(() => api('POST', '/api/folders', { name, parentId: state.folderId }));
+      load(true);
+    } }],
+  }).el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('.modal footer .primary').click(); });
+}
+
+function renameItem(it) {
+  const m = openModal({
+    title: 'Cambiar nombre',
+    body: `<input id="rename" value="${esc(it.name)}">`,
+    actions: [{ label: 'Cancelar' }, { label: 'Aceptar', primary: true, onClick: async (w) => {
+      const name = $('#rename', w).value.trim();
+      if (!name || name === it.name) return;
+      const r = await attempt(() => api('PATCH', `/api/nodes/${it.id}`, { name }));
+      if (r === undefined) return false;
+      load(true);
+    } }],
+  });
+  const input = $('#rename', m.el);
+  setTimeout(() => {
+    const dot = it.type === 'file' ? it.name.lastIndexOf('.') : -1;
+    input.setSelectionRange(0, dot > 0 ? dot : it.name.length);
+  }, 40);
+  m.el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('.modal footer .primary', m.el).click(); });
+}
+
+async function trashItems(items) {
+  for (const it of items) await attempt(() => api('DELETE', `/api/nodes/${it.id}`));
+  toast(items.length > 1 ? `${items.length} elementos movidos a la papelera` : `«${items[0].name}» se ha movido a la papelera`);
+  state.selected.clear();
+  load(true);
+}
+
+async function restoreItems(items) {
+  for (const it of items) await attempt(() => api('POST', `/api/nodes/${it.id}/restore`));
+  toast(items.length > 1 ? 'Elementos restaurados' : `«${items[0].name}» restaurado`);
+  load(true);
+}
+
+function deleteForever(items) {
+  openModal({
+    title: '¿Eliminar definitivamente?',
+    body: `<p>${items.length > 1 ? `Se eliminarán ${items.length} elementos` : `Se eliminará «${esc(items[0].name)}»`} para siempre.</p>`,
+    actions: [{ label: 'Cancelar' }, { label: 'Eliminar', danger: true, onClick: async () => {
+      for (const it of items) await attempt(() => api('DELETE', `/api/nodes/${it.id}?permanent=1`));
+      load(true); refreshMe();
+    } }],
+  });
+}
+
+async function starItems(items, starred) {
+  for (const it of items) await attempt(() => api('PATCH', `/api/nodes/${it.id}`, { starred }));
+  load(true);
+}
+
+async function copyItem(it) {
+  const r = await attempt(() => api('POST', `/api/nodes/${it.id}/copy`, {}), 'Copia creada');
+  if (r) { load(true); refreshMe(); }
+}
+
+async function leaveShare(it) {
+  const data = await attempt(() => api('GET', `/api/nodes/${it.id}/shares`));
+  const mine = data?.shares.find((s) => s.user.id === state.me.id);
+  if (mine) await attempt(() => api('DELETE', `/api/shares/${mine.id}`), 'Eliminado de tu lista');
+  load(true);
+}
+
+async function moveItems(items, parentId) {
+  let ok = 0;
+  for (const it of items) {
+    if (it.id === parentId) continue;
+    if (await attempt(() => api('PATCH', `/api/nodes/${it.id}`, { parentId: parentId || 'root' }))) ok++;
+  }
+  if (ok) toast(ok > 1 ? `${ok} elementos movidos` : 'Elemento movido');
+  load(true);
+}
+
+async function moveDialog(items) {
+  const data = await attempt(() => api('GET', '/api/folders'));
+  if (!data) return;
+  const kids = new Map();
+  for (const f of data.items) {
+    if (!kids.has(f.parentId)) kids.set(f.parentId, []);
+    kids.get(f.parentId).push(f);
+  }
+  const blocked = new Set(items.map((i) => i.id));
+  let target = null;
+  const rows = [];
+  const walk = (parent, depth, disabled) => {
+    for (const f of (kids.get(parent) || []).sort((a, b) => a.name.localeCompare(b.name, 'es'))) {
+      const dis = disabled || blocked.has(f.id);
+      rows.push(`<button data-t="${f.id}" style="padding-left:${10 + depth * 18}px" ${dis ? 'disabled' : ''}>${icon('folder')}<span>${esc(f.name)}</span></button>`);
+      walk(f.id, depth + 1, dis);
+    }
+  };
+  walk(null, 1, false);
+  const m = openModal({
+    title: items.length > 1 ? `Mover ${items.length} elementos` : `Mover «${items[0].name}»`,
+    body: `<div class="tree"><button data-t="" class="sel">${icon('drive')}<span>Mi unidad</span></button>${rows.join('')}</div>`,
+    actions: [{ label: 'Cancelar' }, { label: 'Mover aquí', primary: true, onClick: () => moveItems(items, target) }],
+  });
+  $('.tree', m.el).addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-t]');
+    if (!b || b.disabled) return;
+    $$('.tree button', m.el).forEach((x) => x.classList.toggle('sel', x === b));
+    target = b.dataset.t || null;
+  });
+}
+
+async function detailsDialog(it) {
+  const info = await attempt(() => api('GET', `/api/nodes/${it.id}`));
+  if (!info) return;
+  const k = fileKind(info);
+  openModal({
+    title: info.name,
+    body: `<div class="details"><dl>
+      <dt>Tipo</dt><dd>${k.label}${info.mime ? ` <span class="muted">(${esc(info.mime)})</span>` : ''}</dd>
+      ${info.type === 'file' ? `<dt>Tamaño</dt><dd>${formatSize(info.size)}</dd>` : ''}
+      <dt>Ubicación</dt><dd>${esc(info.path)}</dd>
+      <dt>Propietario</dt><dd>${info.owner ? esc(info.owner.name) : 'yo'}</dd>
+      <dt>Tu acceso</dt><dd>${{ owner: 'Propietario', editor: 'Editor', viewer: 'Lector' }[info.role]}</dd>
+      <dt>Creado</dt><dd>${new Date(info.createdAt).toLocaleString('es')}</dd>
+      <dt>Modificado</dt><dd>${new Date(info.updatedAt).toLocaleString('es')}</dd>
+      ${info.type === 'file' ? `<dt>Versión</dt><dd>${info.version}</dd><dt>SHA-256</dt><dd class="muted small">${esc(info.hash)}</dd>` : ''}
+    </dl></div>`,
+    actions: [{ label: 'Cerrar', primary: true }],
+  });
+}
+
+// ---------- Compartir ----------
+function linkUrl(token) { return `${location.origin}/s/${token}`; }
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+
+async function quickLink(it) {
+  const r = await attempt(() => api('POST', `/api/nodes/${it.id}/links`, {}));
+  if (!r) return;
+  const url = linkUrl(r.token);
+  if (await copyText(url)) toast('Enlace copiado al portapapeles');
+  else openModal({ title: 'Enlace público', body: `<input value="${esc(url)}" readonly>`, actions: [{ label: 'Listo', primary: true }] });
+  load(true);
+}
+
+async function shareDialog(it) {
+  const body = document.createElement('div');
+  const m = openModal({ title: `Compartir «${it.name}»`, body, wide: true, actions: [{ label: 'Listo', primary: true }], onClose: () => load(true) });
+  const draw = async () => {
+    const data = await attempt(() => api('GET', `/api/nodes/${it.id}/shares`));
+    if (!data) return m.close();
+    const avatar = (u) => `<span class="avatar sm" style="background:${u.color}">${esc((u.name || u.email)[0].toUpperCase())}</span>`;
+    body.innerHTML = `
+      <form class="share-row" id="share-form">
+        <input name="email" type="email" placeholder="Añadir personas por correo electrónico" required>
+        <select name="role"><option value="viewer">Lector</option><option value="editor">Editor</option></select>
+        <button class="btn primary">Compartir</button>
+      </form>
+      <div class="subhead">Personas con acceso</div>
+      <div class="people">
+        <div class="person">${avatar(data.owner)}<div class="who"><b>${esc(data.owner.name)} ${data.owner.id === state.me.id ? '(tú)' : ''}</b><span>${esc(data.owner.email)}</span></div><span class="muted">Propietario</span></div>
+        ${data.shares.map((s) => `<div class="person">${avatar(s.user)}<div class="who"><b>${esc(s.user.name)}</b><span>${esc(s.user.email)}</span></div>
+          <select data-role="${esc(s.user.email)}"><option value="viewer" ${s.role === 'viewer' ? 'selected' : ''}>Lector</option><option value="editor" ${s.role === 'editor' ? 'selected' : ''}>Editor</option></select>
+          <button class="icon-btn" data-unshare="${s.id}" title="Quitar acceso">${icon('close')}</button></div>`).join('')}
+      </div>
+      <div class="subhead">Enlaces públicos</div>
+      <p class="muted small" style="margin-top:0">Cualquiera con el enlace podrá ver ${it.type === 'folder' ? 'esta carpeta' : 'este archivo'}, sin necesidad de cuenta.</p>
+      ${data.links.map((l) => `<div class="link-box">
+        <div class="url"><input value="${esc(linkUrl(l.token))}" readonly><button class="btn" data-copy="${l.token}">Copiar</button>
+          <button class="icon-btn" data-unlink="${l.token}" title="Desactivar enlace">${icon('trash')}</button></div>
+        <div class="link-meta"><span>${icon('eye', 'small')} ${l.views} visitas</span>
+          ${l.hasPassword ? '<span>🔒 Con contraseña</span>' : ''}
+          <span>${l.expiresAt ? `Caduca el ${new Date(l.expiresAt).toLocaleDateString('es')}` : 'Sin caducidad'}</span>
+          ${l.allowDownload ? '' : '<span>Descarga desactivada</span>'}</div></div>`).join('') || ''}
+      <details><summary style="cursor:pointer;font-weight:600;margin:6px 0 10px">Crear enlace nuevo</summary>
+        <form id="link-form">
+          <div class="grid2">
+            <label class="field"><span>Contraseña (opcional)</span><input name="password" type="password" autocomplete="new-password"></label>
+            <label class="field"><span>Caducidad</span><select name="expiresInDays"><option value="0">Nunca</option><option value="1">1 día</option><option value="7">7 días</option><option value="30">30 días</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" name="allowDownload" checked> Permitir descargas</label>
+          <button class="btn">${icon('link')} Crear enlace</button>
+        </form>
+      </details>`;
+    $('#share-form', body).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.target));
+      if (await attempt(() => api('POST', `/api/nodes/${it.id}/shares`, f), `Compartido con ${f.email}`)) draw();
+    };
+    $('#link-form', body).onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const r = await attempt(() => api('POST', `/api/nodes/${it.id}/links`, {
+        password: f.get('password') || null, expiresInDays: Number(f.get('expiresInDays')), allowDownload: f.get('allowDownload') === 'on',
+      }));
+      if (r) { await copyText(linkUrl(r.token)); toast('Enlace creado y copiado'); draw(); }
+    };
+    body.onclick = async (e) => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      if (t.dataset.copy) { if (await copyText(linkUrl(t.dataset.copy))) toast('Enlace copiado'); }
+      else if (t.dataset.unlink) { if (await attempt(() => api('DELETE', `/api/links/${t.dataset.unlink}`), 'Enlace desactivado')) draw(); }
+      else if (t.dataset.unshare) { if (await attempt(() => api('DELETE', `/api/shares/${t.dataset.unshare}`), 'Acceso quitado')) draw(); }
+    };
+    $$('[data-role]', body).forEach((s) => s.onchange = () => attempt(() => api('POST', `/api/nodes/${it.id}/shares`, { email: s.dataset.role, role: s.value }), 'Permiso actualizado'));
+  };
+  draw();
+}
+
+// ---------- Visor ----------
+function openViewer(start) {
+  const files = state.items.filter((i) => i.type === 'file');
+  let index = Math.max(0, files.findIndex((f) => f.id === start.id));
+  const el = document.createElement('div');
+  el.className = 'viewer';
+  document.body.appendChild(el);
+  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
+  const step = (d) => { index = (index + d + files.length) % files.length; draw(); };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowRight' && !e.target.closest('video,audio')) step(1);
+    else if (e.key === 'ArrowLeft' && !e.target.closest('video,audio')) step(-1);
+  };
+  document.addEventListener('keydown', onKey);
+  async function draw() {
+    const it = files[index];
+    const k = fileKind(it);
+    const url = contentUrl(it);
+    let stage;
+    if (k.kind === 'image') stage = `<img src="${url}" alt="${esc(it.name)}">`;
+    else if (k.kind === 'video') stage = `<video src="${url}" controls autoplay playsinline></video>`;
+    else if (k.kind === 'audio') stage = `<audio src="${url}" controls autoplay></audio>`;
+    else if (k.kind === 'pdf') stage = `<iframe src="${url}" title="${esc(it.name)}"></iframe>`;
+    else if (k.kind === 'text' && it.size < 2 * 1024 * 1024) stage = '<pre>Cargando…</pre>';
+    else stage = `<div class="nopreview">${icon(k.icon)}<p>No hay vista previa disponible para este tipo de archivo.</p>
+      <button class="btn primary" data-dl>${icon('download')} Descargar (${formatSize(it.size)})</button></div>`;
+    el.innerHTML = `<header>
+        <button class="icon-btn" data-x aria-label="Cerrar">${icon('back')}</button>
+        <div class="name"><svg class="ico" viewBox="0 0 24 24" style="color:${k.color}">${ICONS[k.icon]}</svg>${esc(it.name)}</div>
+        ${!it.owner ? `<button class="icon-btn" data-share title="Compartir">${icon('share')}</button>` : ''}
+        <button class="icon-btn" data-dl title="Descargar">${icon('download')}</button>
+      </header>
+      <div class="stage">${stage}
+        ${files.length > 1 ? `<button class="icon-btn nav-arrow prev" data-prev aria-label="Anterior">${icon('back')}</button>
+        <button class="icon-btn nav-arrow next" data-next aria-label="Siguiente">${icon('chevron')}</button>` : ''}
+      </div>`;
+    if (k.kind === 'text' && it.size < 2 * 1024 * 1024) {
+      try { $('pre', el).textContent = await (await fetch(url, { credentials: 'same-origin' })).text(); }
+      catch { $('pre', el).textContent = 'No se pudo cargar el archivo.'; }
+    }
+  }
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    const it = files[index];
+    if (e.target.classList.contains('stage')) return close();
+    if (!b) return;
+    if (b.hasAttribute('data-x')) close();
+    else if (b.hasAttribute('data-dl')) download(it);
+    else if (b.hasAttribute('data-share')) shareDialog(it);
+    else if (b.hasAttribute('data-prev')) step(-1);
+    else if (b.hasAttribute('data-next')) step(1);
+  });
+  draw();
+}
+
+// ---------- Subidas ----------
+const uploadQueue = [];
+let activeUploads = 0;
+const uploadsEl = $('#uploads');
+$('#uploads-close').addEventListener('click', () => { uploadsEl.classList.add('hidden'); $('#uploads-list').innerHTML = ''; });
+
+function enqueueUploads(files, parentId) {
+  if (!files.length) return;
+  uploadsEl.classList.remove('hidden');
+  for (const { file, path } of files) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="n">${esc(path)}</span><span class="st">En cola</span><span class="bar"><i></i></span>`;
+    $('#uploads-list').prepend(li);
+    uploadQueue.push({ file, path, parentId, li });
+  }
+  updateUploadTitle();
+  pumpUploads();
+}
+
+function updateUploadTitle() {
+  const pending = uploadQueue.length + activeUploads;
+  $('#uploads-title').textContent = pending ? `Subiendo ${pending} elemento${pending > 1 ? 's' : ''}…` : 'Subidas completadas';
+}
+
+function pumpUploads() {
+  while (activeUploads < 3 && uploadQueue.length) {
+    const job = uploadQueue.shift();
+    activeUploads++;
+    uploadOne(job).finally(() => {
+      activeUploads--;
+      updateUploadTitle();
+      pumpUploads();
+      if (!activeUploads && !uploadQueue.length) { load(true); refreshMe(); }
+    });
+  }
+}
+
+function uploadOne({ file, path, parentId, li }) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    const fd = new FormData();
+    fd.append('file', file, path);
+    xhr.open('POST', `/api/upload${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ''}`);
+    xhr.setRequestHeader('X-Nuvora', '1');
+    const st = $('.st', li), bar = $('.bar i', li);
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const p = Math.round((e.loaded / e.total) * 100);
+      bar.style.width = `${p}%`;
+      st.textContent = `${p}%`;
+    };
+    xhr.onload = () => {
+      if (xhr.status < 300) { li.classList.add('done'); bar.style.width = '100%'; st.textContent = '✓'; }
+      else {
+        li.classList.add('fail');
+        let msg = 'Error';
+        try { msg = JSON.parse(xhr.responseText).error; } catch { /* respuesta sin JSON */ }
+        st.textContent = msg;
+        st.title = msg;
+      }
+      resolve();
+    };
+    xhr.onerror = () => { li.classList.add('fail'); st.textContent = 'Error de red'; resolve(); };
+    xhr.send(fd);
+  });
+}
+
+$('#file-input').addEventListener('change', (e) => {
+  enqueueUploads([...e.target.files].map((f) => ({ file: f, path: f.name })), state.folderId);
+  e.target.value = '';
+});
+$('#folder-input').addEventListener('change', (e) => {
+  enqueueUploads([...e.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name })), state.folderId);
+  e.target.value = '';
+});
+
+// Recorre carpetas arrastradas desde el sistema
+async function collectEntries(dataTransfer) {
+  const out = [];
+  const entries = [...dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) return [...dataTransfer.files].map((f) => ({ file: f, path: f.name }));
+  const readAll = (reader) => new Promise((resolve) => {
+    const acc = [];
+    const next = () => reader.readEntries((batch) => { if (!batch.length) resolve(acc); else { acc.push(...batch); next(); } }, () => resolve(acc));
+    next();
+  });
+  const walk = async (entry, prefix) => {
+    if (entry.isFile) {
+      const file = await new Promise((res, rej) => entry.file(res, rej));
+      out.push({ file, path: prefix + file.name });
+    } else if (entry.isDirectory) {
+      for (const child of await readAll(entry.createReader())) await walk(child, `${prefix}${entry.name}/`);
+    }
+  };
+  for (const e of entries) await walk(e, '');
+  return out;
+}
+
+// ---------- Arrastrar y soltar ----------
+const mainEl = $('#main');
+let dragDepth = 0;
+let internalDrag = null;
+const isExternal = (e) => !internalDrag && [...(e.dataTransfer?.types || [])].includes('Files');
+
+contentEl.addEventListener('dragstart', (e) => {
+  const el = e.target.closest('[data-id]');
+  if (!el) return;
+  if (!state.selected.has(el.dataset.id)) { state.selected = new Set([el.dataset.id]); paintSelection(); }
+  internalDrag = selectedItems();
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', internalDrag.map((i) => i.name).join(', '));
+});
+document.addEventListener('dragend', () => { internalDrag = null; $$('.drop-over').forEach((x) => x.classList.remove('drop-over')); });
+
+document.addEventListener('dragover', (e) => {
+  const target = e.target.closest?.('[data-drop]');
+  $$('.drop-over').forEach((x) => x !== target && x.classList.remove('drop-over'));
+  if (internalDrag) {
+    if (target && target.dataset.drop && !internalDrag.some((i) => i.id === target.dataset.drop)) {
+      e.preventDefault();
+      target.classList.add('drop-over');
+    }
+  } else if (isExternal(e) && canEditHere()) {
+    e.preventDefault();
+    if (target && target.dataset.drop && target.dataset.drop !== 'root') target.classList.add('drop-over');
+  }
+});
+mainEl.addEventListener('dragenter', (e) => {
+  if (!isExternal(e) || !canEditHere()) return;
+  dragDepth++;
+  $('#drop-target').textContent = state.folder ? state.folder.name : 'Mi unidad';
+  mainEl.classList.add('dragging');
+});
+mainEl.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; mainEl.classList.remove('dragging'); } });
+document.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  mainEl.classList.remove('dragging');
+  const target = e.target.closest?.('[data-drop]');
+  $$('.drop-over').forEach((x) => x.classList.remove('drop-over'));
+  if (internalDrag) {
+    const items = internalDrag;
+    internalDrag = null;
+    if (target && target.dataset.drop) moveItems(items, target.dataset.drop === 'root' ? null : target.dataset.drop);
+    return;
+  }
+  if (!isExternal(e) || !canEditHere()) return;
+  const parentId = target && target.dataset.drop && target.dataset.drop !== 'root' ? target.dataset.drop : state.folderId;
+  enqueueUploads(await collectEntries(e.dataTransfer), parentId);
+});
+
+// ---------- Página de sincronización ----------
+function renderSync() {
+  const origin = location.origin;
+  $('#content').innerHTML = `<div class="sync-page">
+    <h2>Sincroniza una carpeta de tu equipo</h2>
+    <p class="muted">Con el cliente <b>nuvora-sync</b> cualquier carpeta de tu ordenador se mantiene idéntica a «Mi unidad»:
+      lo que añadas, cambies o borres en un lado aparece en el otro automáticamente.</p>
+    <ol class="steps">
+      <li><b>Instala Node.js 22 o superior</b> y descarga el cliente desde el repositorio de Nuvora (carpeta <code>sync/</code>).</li>
+      <li><b>Inicia sesión desde la terminal</b>
+        <pre class="cmd">node sync/nuvora-sync.js login --server ${esc(origin)} --email ${esc(state.me.email)}</pre></li>
+      <li><b>Sincroniza una carpeta</b> (con <code>--watch</code> sigue sincronizando en segundo plano)
+        <pre class="cmd">node sync/nuvora-sync.js sync ~/Nuvora --watch</pre></li>
+    </ol>
+    <div class="feature-grid">
+      <div class="feature">${icon('sync')}<b>Bidireccional</b><span class="muted small">Sube cambios locales y descarga los de la nube.</span></div>
+      <div class="feature">${icon('copy')}<b>Sin duplicados</b><span class="muted small">Detecta cambios por huella SHA-256: sólo transfiere lo necesario.</span></div>
+      <div class="feature">${icon('info')}<b>Conflictos seguros</b><span class="muted small">Si un archivo cambia en ambos lados, se conservan las dos versiones.</span></div>
+      <div class="feature">${icon('restore')}<b>Papelera</b><span class="muted small">Lo que borras en local va a la papelera de Nuvora y se puede recuperar.</span></div>
+    </div>
+  </div>`;
+}
+
+boot();
