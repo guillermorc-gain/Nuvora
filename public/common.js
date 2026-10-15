@@ -252,7 +252,10 @@ function aplicarApariencia() {
   root.classList.toggle('solo-iconos', a.pestanas === 'iconos');
   root.classList.toggle('no-anim', !a.animaciones);
   const meta = document.querySelector('meta[name=theme-color]');
-  if (meta) meta.content = getComputedStyle(root).getPropertyValue('--head-1').trim() || '#1565C0';
+  const cabecera = getComputedStyle(root).getPropertyValue('--head-1').trim() || '#1565C0';
+  if (meta) meta.content = cabecera;
+  // En la app de Android, la barra de estado toma el color de la cabecera
+  if (window.NuvoraApp && window.NuvoraApp.colorBarra) window.NuvoraApp.colorBarra(cabecera);
 }
 
 function guardarApariencia(cambios) {

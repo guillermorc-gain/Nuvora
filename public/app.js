@@ -474,6 +474,7 @@ $('#avatar-btn').addEventListener('click', (e) => {
     { icon: 'palette', label: 'Apariencia', action: aparienciaDialog },
     { icon: 'keyboard', label: 'Atajos de teclado', action: atajosDialog },
     { icon: 'sync', label: 'Sincronizar mi ordenador', action: () => go('sync') },
+    ...(window.NuvoraApp ? [{ icon: 'link', label: 'Cambiar de servidor', action: () => window.NuvoraApp.cambiarServidor() }] : []),
     { icon: 'logout', label: 'Cerrar sesión', action: logout },
   ]);
 });

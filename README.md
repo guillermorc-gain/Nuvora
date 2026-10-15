@@ -41,7 +41,8 @@ logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la inter
 
 ## Descargar
 
-**Última versión: <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip>**
+- **Servidor (ordenador):** <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip>
+- **App de Android:** <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.apk>
 
 Cada cambio en la app se prueba y se publica automáticamente en
 [Releases](https://github.com/guillermorc-gain/Nuvora/releases) como `v0.1`, `v0.2`… (workflow
@@ -67,6 +68,19 @@ Variables de entorno opcionales:
 | `NUVORA_QUOTA_GB`  | `15`        | Cuota de almacenamiento por usuario      |
 
 > Para usarlo fuera de tu red local, ponlo detrás de un proxy con HTTPS (Caddy, Nginx…).
+
+## App de Android
+
+`android/` es la app para el móvil (Kotlin, sin dependencias): abre tu servidor Nuvora con todo lo de la web
+y además permite elegir archivos del móvil para subirlos, guarda las descargas en «Descargas», pone el
+vídeo a pantalla completa y tiñe la barra de estado con el color del tema.
+
+1. Arranca el servidor en el ordenador: `npm start` muestra una línea «En el móvil: http://192.168.…:3000».
+2. Instala `Nuvora.apk` (hay que permitir instalar apps de origen desconocido) y escribe esa dirección.
+3. Para cambiar de servidor: foto de perfil → *Cambiar de servidor*.
+
+Cada versión se compila en GitHub Actions y va firmada con la misma clave (`android/app/nuvora.keystore`),
+así que cada APK se instala encima de la anterior.
 
 ## Sincronizar una carpeta del ordenador
 

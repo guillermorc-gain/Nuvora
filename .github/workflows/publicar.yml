@@ -11,6 +11,7 @@ on:
       - 'test/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'android/**'
       - '.github/workflows/publicar.yml'
   # A mano: Actions → «Publicar versión» → Run workflow
   workflow_dispatch:
@@ -26,6 +27,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      numero: ${{ steps.version.outputs.numero }}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +53,7 @@ jobs:
           ULTIMA=$(git tag -l 'v0.*' | sed 's/^v0\.//' | sort -n | tail -1)
           N=$(( ${ULTIMA:-0} + 1 ))
           echo "tag=v0.$N" >> "$GITHUB_OUTPUT"
+          echo "numero=$N" >> "$GITHUB_OUTPUT"
           echo "anterior=${ULTIMA:+v0.$ULTIMA}" >> "$GITHUB_OUTPUT"
           echo "Nueva versión: v0.$N"
 
@@ -76,6 +81,9 @@ jobs:
             echo "1. Descarga **Nuvora.zip** y descomprímelo."
             echo "2. Con Node.js 22.13 o superior: \`cd Nuvora\` y \`npm start\`."
             echo "3. Abre http://localhost:3000"
+            echo
+            echo "**En el móvil (Android):** instala **Nuvora.apk** y escribe la dirección que aparece en el ordenador"
+            echo "al arrancar el servidor («En el móvil: http://…»). El móvil tiene que estar en la misma wifi."
           } > notas.md
           cat notas.md
 
@@ -89,3 +97,35 @@ jobs:
             --title "Nuvora $V" \
             --notes-file notas.md \
             --latest
+
+  # La app de Android: se compila y se añade a la misma versión de Releases
+  apk:
+    needs: publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Compilar la APK
+        run: |
+          N="${{ needs.publicar.outputs.numero }}"
+          gradle -p android assembleRelease --no-daemon -PversionCode="$N" -PversionName="0.$N"
+          cp android/app/build/outputs/apk/release/app-release.apk Nuvora.apk
+          ls -la Nuvora.apk
+
+      - name: Añadir a la versión
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.publicar.outputs.tag }}" Nuvora.apk --clobber

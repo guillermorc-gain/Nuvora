@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono temático (Android 13+): las flechas y la carpeta, en un solo color -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+<group android:pivotX="54.0" android:pivotY="54.0" android:scaleX="1.05" android:scaleY="1.05">
+    <path android:pathData="M77.77,48.07 A24.5,24.5 0 0,0 29.56,52.29" android:strokeWidth="6.2" android:strokeLineCap="round" android:strokeColor="#FF000000"/>
+    <path android:pathData="M36.60,52.17 L22.67,50.71 L30.44,58.58 Z" android:fillColor="#FF000000"/>
+    <path android:pathData="M31.98,64.74 A24.5,24.5 0 0,0 74.78,66.98" android:strokeWidth="6.2" android:strokeLineCap="round" android:strokeColor="#FF000000"/>
+    <path android:pathData="M68.51,63.79 L80.11,71.61 L76.95,61.02 Z" android:fillColor="#FF000000"/>
+    <path android:pathData="M38,44 A3,3 0 0,1 41,41 H49 L52.5,44.5 H67 A3,3 0 0,1 70,47.5 V65 A3,3 0 0,1 67,68 H41 A3,3 0 0,1 38,65 Z" android:fillColor="#FF000000"/>
+</group>
+</vector>
