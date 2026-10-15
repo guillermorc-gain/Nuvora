@@ -190,6 +190,21 @@ jobs:
           cp "${NODE%.tar.gz}/LICENSE" "$APP/Contents/Resources/node/LICENSE"
           "$APP/Contents/Resources/node/bin/node" --version
 
+      # Prueba de humo: abrir la app y comprobar que su servidor arranca y responde
+      - name: Probar la app
+        run: |
+          open dist/Nuvora.app
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:3000/api/config | grep -q '"nuvora":true'; then echo "✓ El servidor de la app responde"; OK=1; break; fi
+            sleep 1
+          done
+          curl -fsS -X POST -H 'Content-Type: application/json' -d '{"name":"Prueba","email":"prueba@nuvora.app","password":"contraseña-larga","client":"ci"}' http://localhost:3000/api/auth/register | grep -q token && echo "✓ Se puede crear una cuenta"
+          ls ~/Library/Logs/Nuvora/ && tail -5 ~/Library/Logs/Nuvora/servidor.log || true
+          pkill -x Nuvora || true
+          sleep 2
+          rm -rf ~/Library/Application\ Support/Nuvora
+          [ "${OK:-}" = 1 ] || { echo "::error::La app no arrancó su servidor"; exit 1; }
+
       # Firma ad hoc (como Memories); con un certificado de Apple en MAC_IDENTIDAD se firmaría con él
       - name: Firmar y crear el .dmg
         env:
