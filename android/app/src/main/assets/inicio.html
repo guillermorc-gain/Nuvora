@@ -65,6 +65,16 @@
     .pasos { margin: 0; padding-left: 20px; }
     .pasos li { margin: 4px 0; }
     .pasos a { color: var(--primary); font-weight: 600; }
+    .google { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 14px; background: #fff; color: #1F1F1F;
+      border: 1px solid #DADCE0; font-weight: 600; }
+    .google svg { width: 20px; height: 20px; }
+    .cuenta { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); margin: 0 0 14px; }
+    .cuenta img, .cuenta .inicial { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; }
+    .cuenta .inicial { display: grid; place-items: center; background: var(--primary); color: #fff; font-weight: 700; }
+    .cuenta b { display: block; }
+    .cuenta span { font-size: 13px; color: var(--muted); }
+    .cuenta a { margin-left: auto; color: var(--primary); font-size: 13px; font-weight: 600; text-decoration: none; }
+    .seccion { font-size: 13px; font-weight: 600; color: var(--muted); margin: 6px 0 8px; }
     .google-nota { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 13px; color: var(--muted); margin-top: 16px; }
     .google-nota svg { width: 16px; height: 16px; }
   </style>
@@ -76,15 +86,18 @@
       <span class="wordmark">Nuvora</span>
       <div class="reflejo" aria-hidden="true"><span class="wordmark">Nuvora</span></div>
     </div>
-    <p>Tus archivos se guardan en Nuvora, en tu ordenador. Conecta el móvil con él y entra con tu cuenta de Google.</p>
+    <p>Entra con tu cuenta de Google. Tus archivos se guardan en tu Nuvora del Mac o del ordenador, y el móvil se conecta a él por la wifi.</p>
+    <button type="button" class="google" id="google" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg> Continuar con Google</button>
+    <div class="cuenta" id="cuenta" hidden><span id="cuenta-foto"></span><div><b id="cuenta-nombre"></b><span id="cuenta-estado">Cuenta de Google</span></div><a href="#" id="cuenta-cambiar">Cambiar</a></div>
+    <div class="seccion" id="titulo-servidores" hidden>Tu Nuvora en esta wifi</div>
     <div class="buscando" id="buscando" hidden><i></i><span>Buscando Nuvora en tu wifi…</span></div>
     <div class="encontrados" id="encontrados"></div>
     <div class="error" id="error" hidden></div>
     <div class="ayuda" id="pasos" hidden>
-      <b class="titulo">¿Aún no tienes Nuvora en el ordenador?</b>
+      <b class="titulo">No encuentro tu Nuvora en esta wifi</b>
       <ol class="pasos">
-        <li>En el ordenador, descarga <a href="https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip">Nuvora.zip</a> y descomprímelo.</li>
-        <li>Abre <b>Iniciar Nuvora</b> (necesita <a href="https://nodejs.org/es/download">Node.js</a>). Si Windows pregunta, permite el acceso en redes privadas.</li>
+        <li>En el Mac, instala <a href="https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora-Mac.dmg">Nuvora para Mac</a> y ábrela. En Windows o Linux: <a href="https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip">Nuvora.zip</a> → <b>Iniciar Nuvora</b>.</li>
+        <li>Si el ordenador pregunta por conexiones entrantes o redes privadas, permítelas.</li>
         <li>Con el móvil en la misma wifi, toca <b>Buscar otra vez</b>.</li>
       </ol>
       <button type="button" id="rebuscar">Buscar otra vez</button>
@@ -96,7 +109,6 @@
       <button id="boton">Conectar</button>
       <p style="text-align:left;font-size:13px;margin:10px 0 0">Aparece en el ordenador al abrir Nuvora («En el móvil: http://…»). Fuera de casa, usa la dirección <code>https://…</code> de <code>npm run tunel</code>.</p>
     </details>
-    <div class="google-nota"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>Después de conectar, entras con Google</div>
   </form>
   <script>
     const q = new URLSearchParams(location.search);
@@ -113,6 +125,38 @@
       document.querySelectorAll('.servidor').forEach((b) => { b.disabled = false; });
     }
     window.mostrarError = mostrarError;
+
+    // ---------- Cuenta de Google (lo primero) ----------
+    const hayGoogle = !!(window.NuvoraApp && NuvoraApp.iniciarConGoogle);
+    let conGoogle = false;
+    function mostrarCuenta(nombre, foto) {
+      $('google').hidden = true;
+      $('cuenta').hidden = false;
+      $('cuenta-nombre').textContent = `Hola, ${nombre.split(' ')[0]}`;
+      $('cuenta-estado').textContent = 'Cuenta de Google lista';
+      $('cuenta-foto').innerHTML = foto ? `<img src="${foto.replace(/"/g, '%22')}" alt="">` : `<span class="inicial">${(nombre[0] || '?').toUpperCase()}</span>`;
+    }
+    window.nuvoraGoogleToken = (token, nombre, foto) => {
+      conGoogle = true;
+      mostrarCuenta(nombre || 'de nuevo', foto || '');
+      caja.hidden = true;
+      // Con la cuenta elegida, se conecta al Nuvora encontrado (si solo hay uno)
+      const servidores = document.querySelectorAll('.servidor');
+      if (servidores.length === 1) servidores[0].click();
+      else if (!servidores.length && $('buscando').hidden) $('pasos').hidden = false;
+    };
+    window.nuvoraGoogleError = (msg) => { if (msg) mostrarError(msg); };
+    function elegirCuenta() { caja.hidden = true; NuvoraApp.iniciarConGoogle(); }
+    $('google').onclick = elegirCuenta;
+    $('cuenta-cambiar').onclick = (e) => { e.preventDefault(); elegirCuenta(); };
+    if (hayGoogle) {
+      $('google').hidden = false;
+      try {
+        const c = JSON.parse(NuvoraApp.cuenta() || '{}');
+        // La cuenta de la última vez: un toque para seguir con ella
+        if (c.nombre) $('google').lastChild.textContent = ` Continuar como ${c.nombre.split(' ')[0]}`;
+      } catch { /* sin cuenta guardada */ }
+    }
 
     function conectar(url) {
       caja.hidden = true;
@@ -132,6 +176,7 @@
       b.querySelector('span span').textContent = url.replace('http://', '') + ' · Toca para conectar';
       b.onclick = () => { b.disabled = true; conectar(url); };
       $('encontrados').appendChild(b);
+      $('titulo-servidores').hidden = false;
       $('pasos').hidden = true;
     };
     window.busquedaTerminada = (n, hayWifi) => {
@@ -139,14 +184,15 @@
       if (n === 0) {
         $('pasos').hidden = false;
         if (!hayWifi) mostrarError('El móvil no está conectado a ninguna wifi.');
-      } else if (n === 1 && !q.get('error') && !q.get('url')) {
-        // Solo hay uno: se conecta directamente
+      } else if (n === 1 && !q.get('error') && !q.get('url') && (conGoogle || !hayGoogle)) {
+        // Solo hay uno y ya está la cuenta (o no hay Google): se conecta directamente
         document.querySelector('.servidor').click();
       }
     };
     function buscar() {
       if (!window.NuvoraApp || !NuvoraApp.buscarServidores) { $('manual').open = true; return; }
       $('encontrados').innerHTML = '';
+      $('titulo-servidores').hidden = true;
       vistos.clear();
       $('pasos').hidden = true;
       $('buscando').hidden = false;

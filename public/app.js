@@ -105,6 +105,9 @@ async function prepararGoogle() {
     // Dentro de la APK: el inicio de sesión de Google de Android (la web de Google no deja hacerlo en una WebView)
     slot.innerHTML = `<button type="button" class="btn wide google">${G_LOGO} Continuar con Google</button>`;
     slot.firstChild.onclick = () => { authError(''); window.NuvoraApp.iniciarConGoogle(); };
+    // Si ya se eligió la cuenta de Google en la bienvenida de la app, se entra directamente
+    const pendiente = typeof window.NuvoraApp.tokenPendiente === 'function' ? window.NuvoraApp.tokenPendiente() : '';
+    if (pendiente) loginGoogle(pendiente);
     return;
   }
   if (window.NuvoraMac) {

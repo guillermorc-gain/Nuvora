@@ -62,6 +62,10 @@ class MainActivity : Activity() {
     private var subida: ValueCallback<Array<Uri>>? = null
     private var pantallaCompleta: View? = null
 
+    // Token de Google conseguido en la pantalla de bienvenida, para entrar en el servidor al conectar
+    private var tokenGoogle: String? = null
+    private var tokenGoogleHora = 0L
+
     private val prefs by lazy { getSharedPreferences("nuvora", MODE_PRIVATE) }
     private val servidor: String? get() = prefs.getString("servidor", null)
 
@@ -137,8 +141,28 @@ class MainActivity : Activity() {
             runOnUiThread { entrarConGoogle() }
         }
 
+        /** ¿Se compiló la app con el proyecto de Google (google-services.json)? */
+        @JavascriptInterface
+        fun googleDisponible(): Boolean = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotEmpty()
+
+        /** El token de Google de la bienvenida (una sola vez y si tiene menos de 50 minutos). */
+        @JavascriptInterface
+        fun tokenPendiente(): String {
+            val t = tokenGoogle
+            tokenGoogle = null
+            return if (t != null && System.currentTimeMillis() - tokenGoogleHora < 50 * 60_000) t else ""
+        }
+
+        /** La cuenta de Google con la que se entró la última vez: {"nombre": …, "foto": …} */
+        @JavascriptInterface
+        fun cuenta(): String = JSONObject().apply {
+            put("nombre", prefs.getString("cuentaNombre", "") ?: "")
+            put("foto", prefs.getString("cuentaFoto", "") ?: "")
+        }.toString()
+
         @JavascriptInterface
         fun cerrarSesionGoogle() {
+            prefs.edit().remove("cuentaNombre").remove("cuentaFoto").apply()
             runOnUiThread {
                 CredentialManager.create(this@MainActivity).clearCredentialStateAsync(
                     ClearCredentialStateRequest(), null, enPrincipal,
@@ -201,7 +225,7 @@ class MainActivity : Activity() {
     private fun entrarConGoogle() {
         val cliente = BuildConfig.GOOGLE_WEB_CLIENT_ID
         if (cliente.isEmpty()) {
-            errorGoogle("Esta versión de la app se compiló sin google-services.json del proyecto Nuvora de Firebase. Entra con un código o con tu correo.")
+            errorGoogle("El inicio de sesión con Google aún no está activado: falta crear el proyecto Nuvora en Firebase. Mientras tanto, conecta con tu Nuvora y entra con tu correo o con un código.")
             return
         }
         val opcion = GetSignInWithGoogleOption.Builder(cliente).build()
@@ -211,8 +235,13 @@ class MainActivity : Activity() {
                 override fun onResult(result: GetCredentialResponse) {
                     val c = result.credential
                     if (c is CustomCredential && c.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                        val token = GoogleIdTokenCredential.createFrom(c.data).idToken
-                        js("window.nuvoraGoogleToken && nuvoraGoogleToken(${JSONObject.quote(token)})")
+                        val g = GoogleIdTokenCredential.createFrom(c.data)
+                        tokenGoogle = g.idToken
+                        tokenGoogleHora = System.currentTimeMillis()
+                        val nombre = g.displayName ?: g.id
+                        val foto = g.profilePictureUri?.toString() ?: ""
+                        prefs.edit().putString("cuentaNombre", nombre).putString("cuentaFoto", foto).apply()
+                        js("window.nuvoraGoogleToken && nuvoraGoogleToken(${JSONObject.quote(g.idToken)}, ${JSONObject.quote(nombre)}, ${JSONObject.quote(foto)})")
                     } else errorGoogle("Google devolvió una credencial inesperada.")
                 }
 
