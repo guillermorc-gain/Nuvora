@@ -397,6 +397,9 @@ Uso:
   nuvora-sync logout                               Cierra la sesión`);
 }
 
+// Dentro de la app de Mac: si la app desaparece (queda huérfano), se cierra también
+if (process.env.NUVORA_APP) setInterval(() => { if (process.ppid === 1) process.exit(0); }, 3000).unref();
+
 if (require.main === module) {
   main().catch((err) => { console.error('✕', err.message); process.exit(1); });
 }

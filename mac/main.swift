@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     private var sincronizador: Process?
     private var tokenSync: String?
     private var saliendo = false
+    private var senal: DispatchSourceSignal?
     private var cargado = false
 
     private var recursos: URL { Bundle.main.resourceURL! }
@@ -49,6 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     // MARK: - Arranque
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Si se cierra la app a la fuerza (kill), se cierran también el servidor y la sincronización
+        signal(SIGTERM, SIG_IGN)
+        senal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        senal?.setEventHandler { NSApp.terminate(nil) }
+        senal?.resume()
         crearMenus()
         crearBarra()
         crearVentana()
@@ -96,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
             p.arguments = ["--disable-warning=ExperimentalWarning", self.codigo.appendingPathComponent("server/index.js").path]
             p.currentDirectoryURL = self.codigo
             p.environment = self.entorno([
+                "NUVORA_APP": "1",
                 "PORT": String(self.puerto),
                 "NUVORA_DATA": self.soporte.appendingPathComponent("datos").path,
             ])
@@ -164,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         let p = Process()
         p.executableURL = node
         p.arguments = [codigo.appendingPathComponent("sync/nuvora-sync.js").path, "sync", carpeta.path, "--watch"]
-        p.environment = entorno(["NUVORA_CONFIG": config.path])
+        p.environment = entorno(["NUVORA_CONFIG": config.path, "NUVORA_APP": "1"])
         let log = registro("sincronizacion.log")
         p.standardOutput = log
         p.standardError = log
