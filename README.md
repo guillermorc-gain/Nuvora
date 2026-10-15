@@ -2,7 +2,7 @@
 
 Nuvora es una nube personal estilo Google Drive para **guardar, compartir y sincronizar** archivos, fotos, videos y lo que quieras.
 
-Es de la misma familia que **Memories**: el icono usa sus flechas de sincronizar (con una nube en el centro), el
+Es de la misma familia que **Memories**: el icono usa sus flechas de sincronizar (con una carpeta en la nube en el centro), el
 logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la interfaz sus temas y opciones de apariencia.
 
 ## Funciones

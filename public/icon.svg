@@ -1,11 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
   <!-- Icono de Nuvora, de la familia de Memories: las mismas flechas de
-       sincronizar y, en el centro, una nube sobre dos archivos. -->
+       sincronizar y, en el centro, una carpeta con una nube («Carpeta en la nube»). -->
   <defs>
     <linearGradient id="ar1" gradientUnits="userSpaceOnUse" x1="21.5" y1="60" x2="86.5" y2="50"><stop offset="0" stop-color="#1E6FF0"/><stop offset=".55" stop-color="#1FA5F2"/><stop offset="1" stop-color="#2BB673"/></linearGradient>
     <linearGradient id="ar2" gradientUnits="userSpaceOnUse" x1="21.5" y1="60" x2="86.5" y2="56"><stop offset="0" stop-color="#6A3DE8"/><stop offset=".5" stop-color="#E8337A"/><stop offset="1" stop-color="#FF7A2F"/></linearGradient>
     <linearGradient id="f1" gradientUnits="userSpaceOnUse" x1="43" y1="40" x2="69" y2="64"><stop offset="0" stop-color="#F2A93B"/><stop offset="1" stop-color="#E9508C"/></linearGradient>
-    <linearGradient id="f2" gradientUnits="userSpaceOnUse" x1="39" y1="45" x2="65" y2="69"><stop offset="0" stop-color="#9CC8FF"/><stop offset="1" stop-color="#5E9DF2"/></linearGradient>
     <linearGradient id="nb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3FA9F5"/><stop offset="1" stop-color="#5BD3E8"/></linearGradient>
   </defs>
   <rect width="108" height="108" rx="24" fill="#fff"/>
@@ -15,13 +14,8 @@
     <path d="M31.98 64.74a24.5 24.5 0 0 0 42.8 2.24" fill="none" stroke="url(#ar2)" stroke-width="6.2" stroke-linecap="round"/>
     <path d="m68.51 63.79 11.6 7.82-3.16-10.59z" fill="#FF7A2F" stroke="#FF7A2F" stroke-width="1.2" stroke-linejoin="round"/>
     <rect x="45" y="39" width="22" height="25" rx="3" fill="url(#f1)" transform="rotate(14 54 54)"/>
-    <rect x="41" y="43" width="22" height="25" rx="3" fill="url(#f2)" transform="rotate(-12 54 54)"/>
-    <g transform="translate(54 57.5) scale(.86) translate(-33.5 -31)">
-      <path d="M20 45h25a10 10 0 0 0 1-19.9A13 13 0 0 0 21.3 28 8.5 8.5 0 0 0 20 45z" fill="#fff" stroke="#DCE6F2" stroke-width="1"/>
-    </g>
-    <g transform="translate(54 58.3) scale(.68) translate(-33.5 -31)">
-      <path d="M20 45h25a10 10 0 0 0 1-19.9A13 13 0 0 0 21.3 28 8.5 8.5 0 0 0 20 45z" fill="url(#nb)"/>
-    </g>
-    <circle cx="63.5" cy="45.5" r="3.3" fill="#F9C534"/>
+    <path d="M38 44a3 3 0 0 1 3-3h8l3.5 3.5H67a3 3 0 0 1 3 3V65a3 3 0 0 1-3 3H41a3 3 0 0 1-3-3z" fill="#fff" stroke="#DCE6F2"/>
+    <path d="M40.5 47.5a1.5 1.5 0 0 1 1.5-1.5h24a1.5 1.5 0 0 1 1.5 1.5V64a1.5 1.5 0 0 1-1.5 1.5H42a1.5 1.5 0 0 1-1.5-1.5z" fill="url(#nb)"/>
+    <path d="M20 45h25a10 10 0 0 0 1-19.9A13 13 0 0 0 21.3 28 8.5 8.5 0 0 0 20 45z" fill="#fff" transform="translate(54 57) scale(.38) translate(-33.5 -31)"/>
   </g>
 </svg>
