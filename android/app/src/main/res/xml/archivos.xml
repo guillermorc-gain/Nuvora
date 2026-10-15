@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Para abrir y compartir con otras apps los archivos de la carpeta Nuvora -->
+<paths>
+    <external-files-path name="nuvora" path="Nuvora/" />
+    <files-path name="interna" path="Nuvora/" />
+</paths>

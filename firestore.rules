@@ -1,0 +1,9 @@
+rules_version = '2';
+// Nuvora (proyecto de Firebase «Nuvora»): cada cuenta solo ve su propia lista de dispositivos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /usuarios/{uid}/{documento=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

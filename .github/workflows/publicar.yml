@@ -125,12 +125,47 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
+
+      # Syncthing va dentro de la APK (como en Memories): se compila para Android
+      # con el NDK que trae la máquina y se guarda en caché para no repetirlo.
+      - name: Syncthing en caché
+        id: cache-syncthing
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/jniLibs
+          key: syncthing-v2.1.5-android26-arm64-arm
+
+      - uses: actions/setup-go@v5
+        if: steps.cache-syncthing.outputs.cache-hit != 'true'
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Compilar Syncthing
+        if: steps.cache-syncthing.outputs.cache-hit != 'true'
+        run: |
+          git clone -q --depth 1 -b v2.1.5 https://github.com/syncthing/syncthing /tmp/syncthing
+          cd /tmp/syncthing
+          # anet (red en Android) usa go:linkname, que Go ya no permite por defecto
+          export EXTRA_LDFLAGS="-checklinkname=0"
+          NDK="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          compilar() {  # $1 goarch  $2 compilador  $3 carpeta de la APK
+            CGO_ENABLED=1 GOARM=7 go run build.go -goos android -goarch "$1" -cc "$NDK/$2" -no-upgrade -build-out libsyncthing.so build syncthing
+            mkdir -p "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/$3"
+            mv libsyncthing.so "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/$3/"
+          }
+          compilar arm64 aarch64-linux-android26-clang arm64-v8a
+          compilar arm armv7a-linux-androideabi26-clang armeabi-v7a
+          ls -laR "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/"
 
       - name: Compilar la APK
         run: |
           N="${{ needs.publicar.outputs.numero }}"
-          gradle -p android assembleRelease --no-daemon -PversionCode="$N" -PversionName="0.$N"
+          gradle -p android assembleRelease --no-daemon -PversionCode="$N" -PversionName="0.$N" 2>&1 | tee compilacion.log || {
+            grep -E '^e: |error:' compilacion.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
           cp android/app/build/outputs/apk/release/app-release.apk Nuvora.apk
           ls -la Nuvora.apk
 
