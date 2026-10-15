@@ -107,6 +107,21 @@ async function prepararGoogle() {
     slot.firstChild.onclick = () => { authError(''); window.NuvoraApp.iniciarConGoogle(); };
     return;
   }
+  if (window.NuvoraMac) {
+    // En la app de Mac: Google no deja entrar dentro de una ventana de app, así que se
+    // termina en el navegador, que aprueba un código de vinculación para esta ventana.
+    slot.innerHTML = `<button type="button" class="btn wide google">${G_LOGO} Continuar con Google</button>`;
+    slot.firstChild.onclick = async () => {
+      authError('');
+      let data;
+      try { data = await api('POST', '/api/vincular', { client: 'web' }); } catch (err) { authError(err.message); return; }
+      window.NuvoraMac.abrirNavegador(`${location.origin}/#/vincular/${data.codigo}`);
+      esperarVinculo(data, 'Continuar con Google',
+        `<p>Se ha abierto tu navegador: entra allí con tu cuenta de Google y pulsa <b>Vincular</b>. Esta ventana entrará sola.</p>
+         <p class="esperando"><i></i> Esperando al navegador…</p>`);
+    };
+    return;
+  }
   let cfg;
   try { cfg = await api('GET', '/api/config'); } catch { return; }
   if (!cfg.googleClientId) return;
@@ -129,15 +144,16 @@ async function prepararGoogle() {
 $('#vincular-btn').addEventListener('click', async () => {
   let data;
   try { data = await api('POST', '/api/vincular', { client: 'web' }); } catch (err) { authError(err.message); return; }
-  let activo = true;
-  const m = openModal({
-    title: 'Entrar con otro dispositivo',
-    body: `<p>En el móvil o en otro ordenador donde ya hayas entrado en Nuvora, toca tu <b>foto de perfil → Vincular un dispositivo</b> y escribe este código:</p>
+  esperarVinculo(data, 'Entrar con otro dispositivo',
+    `<p>En el móvil o en otro ordenador donde ya hayas entrado en Nuvora, toca tu <b>foto de perfil → Vincular un dispositivo</b> y escribe este código:</p>
       <div class="codigo">${esc(data.codigo)}</div>
-      <p class="esperando"><i></i> Esperando… El código caduca en 10 minutos.</p>`,
-    actions: [{ label: 'Cancelar' }],
-    onClose: () => { activo = false; },
-  });
+      <p class="esperando"><i></i> Esperando… El código caduca en 10 minutos.</p>`);
+});
+
+// Espera a que otro dispositivo apruebe el código y entra con esa cuenta
+function esperarVinculo(data, titulo, body) {
+  let activo = true;
+  const m = openModal({ title: titulo, body, actions: [{ label: 'Cancelar' }], onClose: () => { activo = false; } });
   const comprobar = async () => {
     if (!activo) return;
     try {
@@ -149,13 +165,13 @@ $('#vincular-btn').addEventListener('click', async () => {
     setTimeout(comprobar, 2000);
   };
   setTimeout(comprobar, 2000);
-});
+}
 
-function vincularDialog() {
+function vincularDialog(codigo = '') {
   const m = openModal({
     title: 'Vincular un dispositivo',
     body: `<p>Escribe el código que aparece en el otro dispositivo (en «Entrar con otro dispositivo» o en <code>nuvora-sync login</code>).</p>
-      <input id="codigo-vincular" class="codigo-input" maxlength="9" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters">`,
+      <input id="codigo-vincular" class="codigo-input" maxlength="9" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" value="${esc(codigo)}">`,
     actions: [{ label: 'Cancelar' }, { label: 'Vincular', primary: true, onClick: async (w) => {
       const r = await attempt(() => api('POST', '/api/vincular/aprobar', { codigo: $('#codigo-vincular', w).value }));
       if (!r) return false;
@@ -257,6 +273,13 @@ function pulseRing() {
 function route() {
   const hash = location.hash.replace(/^#\/?/, '') || (VIEW_TITLES[apariencia.inicio] ? apariencia.inicio : 'drive');
   const [view, arg] = hash.split('/');
+  // Enlace para aprobar un código (lo abre la app de Mac en el navegador): #/vincular/ABCD-EFGH
+  if (view === 'vincular') {
+    history.replaceState(null, '', '#/drive');
+    vincularDialog(decodeURIComponent(arg || ''));
+    route();
+    return;
+  }
   state.view = VIEW_TITLES[view] ? view : 'drive';
   state.folderId = state.view === 'drive' && arg ? arg : null;
   if (state.view === 'search') state.query = decodeURIComponent(arg || '');
@@ -573,6 +596,7 @@ $('#avatar-btn').addEventListener('click', (e) => {
     { icon: 'keyboard', label: 'Atajos de teclado', action: atajosDialog },
     { icon: 'sync', label: 'Sincronizar mi ordenador', action: () => go('sync') },
     ...(window.NuvoraApp ? [{ icon: 'link', label: 'Cambiar de servidor', action: () => window.NuvoraApp.cambiarServidor() }] : []),
+    ...(window.NuvoraMac ? [{ icon: 'folder', label: 'Abrir la carpeta Nuvora en el Finder', action: () => window.NuvoraMac.abrirCarpeta() }] : []),
     { icon: 'logout', label: 'Cerrar sesión', action: logout },
   ]);
 });

@@ -43,6 +43,7 @@ logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la inter
 
 - **Servidor (ordenador):** <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip>
 - **App de Android:** <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.apk>
+- **App para Mac (Apple Silicon):** <https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora-Mac.dmg>
 
 Cada cambio en la app se prueba y se publica automáticamente en
 [Releases](https://github.com/guillermorc-gain/Nuvora/releases) como `v0.1`, `v0.2`… (workflow
@@ -114,6 +115,22 @@ Muestra una dirección `https://….trycloudflare.com` para escribir en la app (
 Esa dirección cambia cada vez. Para una **fija**, con una cuenta de Cloudflare y un dominio:
 `cloudflared tunnel login`, `cloudflared tunnel create nuvora`, `cloudflared tunnel route dns nuvora nuvora.tudominio.com`,
 apunta el túnel a `http://localhost:3000` y arranca con `NUVORA_TUNEL=nuvora npm run tunel`.
+
+## App para Mac (Apple Silicon)
+
+`mac/` es Nuvora para Mac: una app nativa en Swift que **lleva dentro el servidor y Node.js**, así que no hay que
+instalar nada más. Al abrirla:
+
+- arranca tu Nuvora en el Mac (los archivos se guardan en `~/Library/Application Support/Nuvora`) y lo muestra en su ventana;
+- sincroniza la carpeta **`~/Nuvora`** con tu cuenta (con el mismo motor que `nuvora-sync`);
+- se queda en la **barra de menús** aunque cierres la ventana, para que el móvil y tus otros dispositivos lo encuentren
+  (opción *Abrir al iniciar el Mac*);
+- **Continuar con Google** abre tu navegador y la ventana entra sola cuando terminas.
+
+Instalación: abre `Nuvora-Mac.dmg` y arrastra Nuvora a *Aplicaciones*. Va firmada ad hoc (sin certificado de Apple),
+así que la primera vez hay que hacer **clic derecho → Abrir**, o en *Ajustes del Sistema → Privacidad y seguridad →
+Abrir igualmente*. Si macOS pregunta si Nuvora puede aceptar conexiones entrantes, di que sí: es lo que permite que
+el móvil se conecte. Registros en `~/Library/Logs/Nuvora`.
 
 ## App de Android
 

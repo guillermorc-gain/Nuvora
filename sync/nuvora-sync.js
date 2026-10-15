@@ -24,7 +24,8 @@ const readline = require('node:readline');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 
-const CONFIG_FILE = path.join(os.homedir(), '.nuvora', 'config.json');
+// NUVORA_CONFIG: otra ubicación (la app de Mac guarda aquí la sesión de su ventana)
+const CONFIG_FILE = process.env.NUVORA_CONFIG || path.join(os.homedir(), '.nuvora', 'config.json');
 const STATE_NAME = '.nuvora-sync.json';
 const IGNORE = new Set([STATE_NAME, '.DS_Store', 'Thumbs.db', 'desktop.ini']);
 const ignored = (name) => IGNORE.has(name) || name.startsWith('.~') || name.endsWith('.nuvora-part') || name.startsWith('~$');

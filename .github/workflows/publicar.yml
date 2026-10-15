@@ -13,6 +13,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'android/**'
+      - 'mac/**'
       - '.github/workflows/publicar.yml'
   # A mano: Actions → «Publicar versión» → Run workflow
   workflow_dispatch:
@@ -89,6 +90,9 @@ jobs:
             echo
             echo "**En el móvil (Android):** instala **Nuvora.apk**. Con el móvil en la misma wifi, la app encuentra"
             echo "sola tu Nuvora del ordenador; después entras con tu cuenta de Google."
+            echo
+            echo "**En el Mac (Apple Silicon):** abre **Nuvora-Mac.dmg** y arrastra Nuvora a Aplicaciones. Lleva todo dentro"
+            echo "(no hace falta Node.js). La primera vez: clic derecho → Abrir, o Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente."
           } > notas.md
           cat notas.md
 
@@ -134,3 +138,73 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ needs.publicar.outputs.tag }}" Nuvora.apk --clobber
+
+  # Nuvora para Mac (Apple Silicon): app nativa en Swift con el servidor y Node.js dentro
+  mac:
+    needs: publicar
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compilar la app
+        run: |
+          swiftc -O -target arm64-apple-macos13 mac/main.swift -o Nuvora 2>&1 | tee swift.log
+          test -f Nuvora || { grep -E 'error:' swift.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+
+      - name: Montar Nuvora.app
+        run: |
+          N="${{ needs.publicar.outputs.numero }}"
+          APP=dist/Nuvora.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/servidor"
+          mv Nuvora "$APP/Contents/MacOS/Nuvora"
+          sed -e "s/__VERSION__/0.$N/" -e "s/__BUILD__/$N/" mac/Info.plist > "$APP/Contents/Info.plist"
+
+          # Icono
+          mkdir AppIcon.iconset
+          for t in 16 32 128 256 512; do
+            sips -z $t $t mac/AppIcon.png --out "AppIcon.iconset/icon_${t}x${t}.png" >/dev/null
+            sips -z $((t*2)) $((t*2)) mac/AppIcon.png --out "AppIcon.iconset/icon_${t}x${t}@2x.png" >/dev/null
+          done
+          iconutil -c icns AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+
+          # El servidor de Nuvora con sus dependencias
+          npm ci --omit=dev
+          npm version --no-git-tag-version --allow-same-version "0.$N.0"
+          cp -R server public sync scripts package.json node_modules "$APP/Contents/Resources/servidor/"
+          if [ -f android/app/google-services.json ]; then cp android/app/google-services.json "$APP/Contents/Resources/servidor/"; fi
+
+          # Node.js 22 oficial para Apple Silicon
+          NODE=$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | awk '/darwin-arm64.tar.gz/ {print $2}')
+          curl -fsSL -o node.tgz "https://nodejs.org/dist/latest-v22.x/$NODE"
+          tar -xzf node.tgz
+          mkdir -p "$APP/Contents/Resources/node/bin"
+          cp "${NODE%.tar.gz}/bin/node" "$APP/Contents/Resources/node/bin/node"
+          cp "${NODE%.tar.gz}/LICENSE" "$APP/Contents/Resources/node/LICENSE"
+          "$APP/Contents/Resources/node/bin/node" --version
+
+      # Firma ad hoc (como Memories); con un certificado de Apple en MAC_IDENTIDAD se firmaría con él
+      - name: Firmar y crear el .dmg
+        env:
+          MAC_IDENTIDAD: ${{ secrets.MAC_IDENTIDAD }}
+        run: |
+          APP=dist/Nuvora.app
+          FIRMA="${MAC_IDENTIDAD:--}"
+          codesign --force --sign "$FIRMA" "$APP/Contents/Resources/node/bin/node"
+          codesign --force --sign "$FIRMA" "$APP"
+          codesign --verify --deep --strict "$APP"
+          mkdir dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Aplicaciones
+          hdiutil create -volname "Nuvora" -srcfolder dmg -ov -format UDZO Nuvora-Mac.dmg
+          ls -la Nuvora-Mac.dmg
+
+      - name: Añadir a la versión
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.publicar.outputs.tag }}" Nuvora-Mac.dmg --clobber
