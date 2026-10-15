@@ -1,33 +1,26 @@
 /*
- * Nuvora — estilos. La paleta, las formas y la cabecera siguen a Memories:
- * los temas de Apariencia (common.js) redefinen estas variables al momento.
+ * Nuvora — estilos. La paleta sale del icono «Nube N» (violeta → cian); los
+ * temas de Apariencia (common.js) redefinen estas variables al momento.
  */
-@font-face {
-  font-family: "Dancing Script";
-  src: url("/fonts/dancing_script.ttf") format("truetype");
-  font-weight: 400 700;
-  font-display: swap;
-}
-
 :root {
-  /* Tema «Nuvora» (los azules de Memories) */
-  --bg: #F4F6FA;
+  /* Tema «Nuvora»: los colores del icono */
+  --bg: #F6F5FC;
   --surface: #FFFFFF;
-  --surface-2: #EDF1F7;
-  --tint: #DBE7FB;
-  --text: #1A2233;
-  --muted: #566173;
-  --border: #E3E7EE;
-  --primary: #1565C0;
+  --surface-2: #EFEEF8;
+  --tint: #ECE8FF;
+  --text: #1B1D2A;
+  --muted: #5E6275;
+  --border: #E2E1EE;
+  --primary: #6C4DFF;
   --primary-ink: #FFFFFF;
-  --head-1: #1565C0;
-  --head-2: #0D4FA8;
-  --head-3: #003A99;
+  --head-1: #7C5CFF;
+  --head-2: #5B7CFF;
+  --head-3: #1FB8D8;
   --hover: color-mix(in srgb, var(--surface-2) 70%, var(--border));
   --c-folder: color-mix(in srgb, var(--primary) 78%, #fff);
   --danger: #C62828;
   --ok: #2BB673;
-  --ring: #7CC4FF;
+  --ring: #8FF0FF;
   --shadow: 0 1px 2px rgb(16 24 48 / .06), 0 8px 24px rgb(16 24 48 / .08);
   /* Formas (Apariencia → Formas) */
   --r-sm: 8px;
@@ -43,14 +36,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0F131A; --surface: #181D26; --surface-2: #1E2430; --tint: #1B3A6B; --text: #E3E7EE; --muted: #AAB3C2;
-    --border: #2A303B; --primary: #8AB4F8; --primary-ink: #002E6B; --head-1: #0D2147; --head-2: #0A1838; --head-3: #06102A;
+    --bg: #0F0F17; --surface: #181823; --surface-2: #20202E; --tint: #2E2560; --text: #E8E8F2; --muted: #A6A8BC;
+    --border: #2C2C3D; --primary: #A594FF; --primary-ink: #21106B; --head-1: #3A2A8F; --head-2: #2B3C8F; --head-3: #0E5566;
     --danger: #FF8A80; --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0F131A; --surface: #181D26; --surface-2: #1E2430; --tint: #1B3A6B; --text: #E3E7EE; --muted: #AAB3C2;
-  --border: #2A303B; --primary: #8AB4F8; --primary-ink: #002E6B; --head-1: #0D2147; --head-2: #0A1838; --head-3: #06102A;
+  --bg: #0F0F17; --surface: #181823; --surface-2: #20202E; --tint: #2E2560; --text: #E8E8F2; --muted: #A6A8BC;
+  --border: #2C2C3D; --primary: #A594FF; --primary-ink: #21106B; --head-1: #3A2A8F; --head-2: #2B3C8F; --head-3: #0E5566;
   --danger: #FF8A80; --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35); color-scheme: dark;
 }
 
@@ -99,39 +92,36 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
 .error { color: var(--danger); font-size: 13px; margin: 0 0 12px; }
 .check { display: flex; gap: 10px; align-items: center; margin: 10px 0; cursor: pointer; }
 
-/* ---------- Marca: letra caligráfica con brillo y reflejo, como el logo de Memories ---------- */
+/* ---------- Marca: «Nuvora» en letra gruesa con el degradado del icono ---------- */
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand img { width: 38px; height: 38px; border-radius: 10px; box-shadow: 0 2px 6px rgb(0 0 0 / .15); }
+.brand img { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 2px 8px rgb(20 10 80 / .25); }
 .wordmark {
-  font-family: "Dancing Script", "Segoe Script", cursive; font-weight: 700; line-height: 1.1;
+  font-family: var(--font); font-weight: 800; letter-spacing: -.035em; line-height: 1.1;
   background-image:
-    linear-gradient(105deg, transparent 42%, rgb(255 255 255 / .85) 50%, transparent 58%),
-    var(--wm, linear-gradient(90deg, #1E3A8A, #6A3DE8 38%, #C2185B 70%, #FF7A2F));
+    linear-gradient(105deg, transparent 42%, rgb(255 255 255 / .75) 50%, transparent 58%),
+    var(--wm, linear-gradient(100deg, #7C5CFF, #22D3EE));
   background-size: 300% 100%, 100% 100%;
   background-repeat: no-repeat;
   background-position: 150% 0, 0 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: brillo 7.4s linear infinite;
-  padding: 0 .08em;
+  animation: brillo 9s linear infinite;
 }
 .wordmark.on-head {
-  --wm: linear-gradient(#fff, #fff); font-size: 30px;
-  background-image: linear-gradient(105deg, transparent 42%, rgb(140 200 255 / .95) 50%, transparent 58%), linear-gradient(#fff, #fff);
+  font-size: 23px;
+  background-image: linear-gradient(105deg, transparent 42%, rgb(255 255 255 / .55) 50%, transparent 58%), linear-gradient(rgb(255 255 255 / .96), rgb(255 255 255 / .96));
 }
-@keyframes brillo { 0% { background-position: 150% 0, 0 0; } 19%, 100% { background-position: -50% 0, 0 0; } }
-.logo { display: grid; justify-items: center; }
-.logo .wordmark { font-size: 58px; }
-.reflejo { height: .42em; font-size: 58px; overflow: hidden; -webkit-mask-image: linear-gradient(rgb(0 0 0 / .45), transparent); mask-image: linear-gradient(rgb(0 0 0 / .45), transparent); margin-top: -.14em; }
-.reflejo .wordmark { display: block; transform: scaleY(-1); }
+@keyframes brillo { 0% { background-position: 150% 0, 0 0; } 15%, 100% { background-position: -50% 0, 0 0; } }
+.logo { display: grid; justify-items: center; margin: 14px 0 6px; }
+.logo .wordmark { font-size: 44px; }
 
 /* ---------- Acceso ---------- */
 .auth {
   min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px 16px;
   background: radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--head-1) 22%, transparent), transparent 60%),
-              radial-gradient(800px 500px at 100% 100%, rgb(255 122 47 / .14), transparent 60%), var(--bg);
+              radial-gradient(800px 500px at 100% 100%, rgb(34 211 238 / .18), transparent 60%), var(--bg);
 }
 .auth-card { width: min(400px, 100%); min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 28px 28px 30px; box-shadow: var(--shadow); }
-.auth-card .app-icon { width: 76px; height: 76px; display: block; margin: 0 auto 4px; border-radius: 20px; box-shadow: var(--shadow); }
+.auth-card .app-icon { width: 84px; height: 84px; display: block; margin: 0 auto; border-radius: 22px; box-shadow: 0 10px 28px rgb(108 77 255 / .35); }
 .auth-card > p { text-align: center; margin: 0 0 22px; }
 .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border-radius: var(--r-md); padding: 4px; margin-bottom: 20px; }
 .tab { border: 0; background: transparent; padding: 8px; border-radius: var(--r-sm); cursor: pointer; font-weight: 600; color: var(--muted); }
@@ -204,7 +194,7 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
 .nav a.active { background: var(--tint); color: var(--primary); font-weight: 750; }
 .storage { margin-top: auto; padding: 16px; }
 .storage-bar { height: 6px; background: var(--surface-2); border-radius: var(--r-pill); overflow: hidden; }
-.storage-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #1E6FF0, #1FA5F2, #2BB673); border-radius: var(--r-pill); transition: width .4s; }
+.storage-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #7C5CFF, #22D3EE); border-radius: var(--r-pill); transition: width .4s; }
 .storage p { margin: 8px 0 0; }
 
 .main {
@@ -371,7 +361,7 @@ kbd { font: 600 12px ui-monospace, monospace; background: var(--surface-2); bord
 .uploads li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 8px 16px; font-size: 13px; }
 .uploads li .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .uploads li .bar { grid-column: 1 / -1; height: 4px; background: var(--surface-2); border-radius: var(--r-pill); overflow: hidden; }
-.uploads li .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6A3DE8, #E8337A, #FF7A2F); transition: width .2s; }
+.uploads li .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #7C5CFF, #22D3EE); transition: width .2s; }
 .uploads li.done .bar i { background: var(--ok); }
 .uploads li.fail .bar i { background: var(--danger); }
 .uploads li .st { color: var(--muted); }
@@ -411,7 +401,7 @@ pre.cmd { background: #0F1420; color: #E3E6F5; padding: 12px 14px; border-radius
   .topbar { gap: 8px; padding: 0 8px; }
   .topbar .brand { width: auto; }
   .topbar .brand img { display: none; }
-  .wordmark.on-head { font-size: 26px; }
+  .wordmark.on-head { font-size: 21px; }
   .search { height: 40px; padding: 0 12px; }
   #theme-btn, .live { display: none; }
   .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: 280px; background: var(--bg); z-index: 45; transform: translateX(-100%); transition: transform .2s; box-shadow: var(--shadow); padding-top: 16px; }

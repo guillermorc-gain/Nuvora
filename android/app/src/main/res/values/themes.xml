@@ -1,6 +1,6 @@
 <resources>
     <style name="Theme.Nuvora" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#1565C0</item>
+        <item name="android:statusBarColor">#7C5CFF</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowBackground">@color/fondo</item>

@@ -2,8 +2,8 @@
 
 Nuvora es una nube personal estilo Google Drive para **guardar, compartir y sincronizar** archivos, fotos, videos y lo que quieras.
 
-Es de la misma familia que **Memories**: el icono usa sus flechas de sincronizar (con una carpeta en la nube en el centro), el
-logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la interfaz sus temas y opciones de apariencia.
+Su icono es **Nube N**: una nube blanca con la N calada sobre un degradado violeta → cian, que da los colores a toda la
+interfaz. Comparte con **Memories** la forma de sincronizar (Syncthing entre dispositivos) y las opciones de apariencia.
 
 ## Funciones
 
@@ -169,9 +169,6 @@ npm test
 
 Cubren autenticación, subidas, carpetas, papelera, descargas por rangos, ZIP, permisos al compartir, enlaces con contraseña, cuota y la sincronización (en los dos sentidos, solo subir, solo bajar, conflictos y borrados).
 
-## Créditos
-
-La letra del logotipo es [Dancing Script](https://fonts.google.com/specimen/Dancing+Script) (licencia SIL Open Font License), la misma que usa Memories.
 
 ## Estructura
 

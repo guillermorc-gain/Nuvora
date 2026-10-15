@@ -142,10 +142,10 @@ function openModal({ title, body, actions = [], wide = false, onClose }) {
   return { el: wrap, close };
 }
 
-// ---------- Apariencia (los mismos temas y opciones que Memories) ----------
+// ---------- Apariencia: temas y opciones ----------
 // Paleta: [fondo, tarjeta, suave, tinte, tinta, secundario, línea, acento]
 const TEMAS = {
-  nuvora: { nombre: 'Nuvora', claro: null, oscuro: null, muestra: ['#F4F6FA', '#1565C0', '#1FA5F2'], cabecera: ['#1565C0', '#0D4FA8', '#003A99'] },
+  nuvora: { nombre: 'Nuvora', claro: null, oscuro: null, muestra: ['#F6F5FC', '#7C5CFF', '#22D3EE'], cabecera: ['#7C5CFF', '#5B7CFF', '#1FB8D8'] },
   medianoche: { nombre: 'Medianoche',
     claro: ['#EEF2FB', '#FFFFFF', '#E6ECF8', '#DFE6FB', '#16203D', '#5D6A8F', '#D5DCEF', '#4338CA'],
     oscuro: ['#0B1020', '#141C33', '#1A2444', '#1B2D6B', '#DCE6FF', '#8B9AC4', '#26345E', '#22D3EE'],
@@ -253,7 +253,7 @@ function aplicarApariencia() {
   root.classList.toggle('solo-iconos', a.pestanas === 'iconos');
   root.classList.toggle('no-anim', !a.animaciones);
   const meta = document.querySelector('meta[name=theme-color]');
-  const cabecera = getComputedStyle(root).getPropertyValue('--head-1').trim() || '#1565C0';
+  const cabecera = getComputedStyle(root).getPropertyValue('--head-1').trim() || '#7C5CFF';
   if (meta) meta.content = cabecera;
   // En la app de Android, la barra de estado toma el color de la cabecera
   if (window.NuvoraApp && window.NuvoraApp.colorBarra) window.NuvoraApp.colorBarra(cabecera);

@@ -1,20 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <!-- Ilustración de Nuvora (el icono sin fondo), de la familia de Memories: las mismas flechas de
-       sincronizar y, en el centro, una carpeta con una nube («Carpeta en la nube»). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Icono de Nuvora «Nube N»: una nube blanca con la N calada sobre el degradado violeta → cian -->
   <defs>
-    <linearGradient id="ar1" gradientUnits="userSpaceOnUse" x1="21.5" y1="60" x2="86.5" y2="50"><stop offset="0" stop-color="#1E6FF0"/><stop offset=".55" stop-color="#1FA5F2"/><stop offset="1" stop-color="#2BB673"/></linearGradient>
-    <linearGradient id="ar2" gradientUnits="userSpaceOnUse" x1="21.5" y1="60" x2="86.5" y2="56"><stop offset="0" stop-color="#6A3DE8"/><stop offset=".5" stop-color="#E8337A"/><stop offset="1" stop-color="#FF7A2F"/></linearGradient>
-    <linearGradient id="f1" gradientUnits="userSpaceOnUse" x1="43" y1="40" x2="69" y2="64"><stop offset="0" stop-color="#F2A93B"/><stop offset="1" stop-color="#E9508C"/></linearGradient>
-    <linearGradient id="nb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3FA9F5"/><stop offset="1" stop-color="#5BD3E8"/></linearGradient>
+    <linearGradient id="nv" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
   </defs>
-  <g transform="translate(54 54) scale(1.05) translate(-54 -54)">
-    <path d="M77.77 48.07A24.5 24.5 0 0 0 29.56 52.29" fill="none" stroke="url(#ar1)" stroke-width="6.2" stroke-linecap="round"/>
-    <path d="M36.6 52.17 22.67 50.71l7.77 7.87z" fill="#1E6FF0" stroke="#1E6FF0" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M31.98 64.74a24.5 24.5 0 0 0 42.8 2.24" fill="none" stroke="url(#ar2)" stroke-width="6.2" stroke-linecap="round"/>
-    <path d="m68.51 63.79 11.6 7.82-3.16-10.59z" fill="#FF7A2F" stroke="#FF7A2F" stroke-width="1.2" stroke-linejoin="round"/>
-    <rect x="45" y="39" width="22" height="25" rx="3" fill="url(#f1)" transform="rotate(14 54 54)"/>
-    <path d="M38 44a3 3 0 0 1 3-3h8l3.5 3.5H67a3 3 0 0 1 3 3V65a3 3 0 0 1-3 3H41a3 3 0 0 1-3-3z" fill="#fff" stroke="#DCE6F2"/>
-    <path d="M40.5 47.5a1.5 1.5 0 0 1 1.5-1.5h24a1.5 1.5 0 0 1 1.5 1.5V64a1.5 1.5 0 0 1-1.5 1.5H42a1.5 1.5 0 0 1-1.5-1.5z" fill="url(#nb)"/>
-    <path d="M20 45h25a10 10 0 0 0 1-19.9A13 13 0 0 0 21.3 28 8.5 8.5 0 0 0 20 45z" fill="#fff" transform="translate(54 57) scale(.38) translate(-33.5 -31)"/>
-  </g>
+  <rect width="64" height="64" rx="15" fill="url(#nv)"/>
+  <path d="M20 45h25a10 10 0 0 0 1-19.9A13 13 0 0 0 21.3 28 8.5 8.5 0 0 0 20 45z" fill="#fff"/>
+  <path d="M27 40V30l10 10V30" fill="none" stroke="url(#nv)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

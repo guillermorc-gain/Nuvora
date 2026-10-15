@@ -137,14 +137,15 @@ private fun PantallaEntrar(onDentro: (FirebaseUser) -> Unit) {
     var entrando by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 420.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // El icono «Nube N»: su degradado y la nube encima
             Box(
-                Modifier.size(96.dp).shadow(8.dp, RoundedCornerShape(24.dp)).clip(RoundedCornerShape(24.dp)).background(Color.White),
+                Modifier.size(104.dp).shadow(10.dp, RoundedCornerShape(26.dp)).clip(RoundedCornerShape(26.dp)).background(DegradadoLogo),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(96.dp), tint = Color.Unspecified)
+                Icon(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(160.dp), tint = Color.Unspecified)
             }
-            Spacer(Modifier.height(10.dp))
-            Logotipo()
+            Spacer(Modifier.height(18.dp))
+            Logotipo(46.sp)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Tus archivos, fotos y vídeos en todos tus dispositivos. Viajan directamente de uno a otro, sin ordenador y sin pagar nube.",

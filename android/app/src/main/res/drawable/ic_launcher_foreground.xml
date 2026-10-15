@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Icono de Nuvora «Carpeta en la nube»: las flechas de sincronizar de Memories
-     y, en el centro, una carpeta con una nube. Mismo dibujo que public/icon.svg. -->
+<!-- Icono de Nuvora «Nube N»: la nube blanca con la N calada (mismo dibujo que public/icon.svg),
+     dentro de la zona segura del icono adaptativo -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-<group android:pivotX="54.0" android:pivotY="54.0" android:scaleX="1.05" android:scaleY="1.05">
-    <path android:pathData="M77.77,48.07 A24.5,24.5 0 0,0 29.56,52.29" android:strokeWidth="6.2" android:strokeLineCap="round" android:strokeLineJoin="round"><aapt:attr name="android:strokeColor"><gradient android:type="linear" android:startX="21.5" android:startY="60.0" android:endX="86.5" android:endY="50.0"><item android:offset="0" android:color="#FF1E6FF0"/><item android:offset="0.55" android:color="#FF1FA5F2"/><item android:offset="1" android:color="#FF2BB673"/></gradient></aapt:attr></path>
-    <path android:pathData="M36.60,52.17 L22.67,50.71 L30.44,58.58 Z" android:fillColor="#FF1E6FF0" android:strokeColor="#FF1E6FF0" android:strokeWidth="1.2" android:strokeLineJoin="round"/>
-    <path android:pathData="M31.98,64.74 A24.5,24.5 0 0,0 74.78,66.98" android:strokeWidth="6.2" android:strokeLineCap="round" android:strokeLineJoin="round"><aapt:attr name="android:strokeColor"><gradient android:type="linear" android:startX="21.5" android:startY="60.0" android:endX="86.5" android:endY="56.0"><item android:offset="0" android:color="#FF6A3DE8"/><item android:offset="0.5" android:color="#FFE8337A"/><item android:offset="1" android:color="#FFFF7A2F"/></gradient></aapt:attr></path>
-    <path android:pathData="M68.51,63.79 L80.11,71.61 L76.95,61.02 Z" android:fillColor="#FFFF7A2F" android:strokeColor="#FFFF7A2F" android:strokeWidth="1.2" android:strokeLineJoin="round"/>
-    <group android:rotation="14" android:pivotX="54.0" android:pivotY="54.0">
-        <path android:pathData="M48,39 H64 A3,3 0 0,1 67,42 V61 A3,3 0 0,1 64,64 H48 A3,3 0 0,1 45,61 V42 A3,3 0 0,1 48,39 Z"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="43.0" android:startY="40.0" android:endX="69.0" android:endY="64.0"><item android:offset="0" android:color="#FFF2A93B"/><item android:offset="1" android:color="#FFE9508C"/></gradient></aapt:attr></path>
+    <group android:pivotX="33.5" android:pivotY="31.0" android:scaleX="1.2" android:scaleY="1.2"
+        android:translateX="20.5" android:translateY="23.0">
+        <path android:fillColor="#FFFFFFFF"
+            android:pathData="M20,45 H45 A10,10 0 0,0 46,25.1 A13,13 0 0,0 21.3,28 A8.5,8.5 0 0,0 20,45 Z"/>
+        <path android:pathData="M27,40 V30 L37,40 V30" android:strokeWidth="3.6"
+            android:strokeLineCap="round" android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="27" android:startY="30" android:endX="37" android:endY="40">
+                    <item android:offset="0" android:color="#FF7C5CFF"/>
+                    <item android:offset="1" android:color="#FF22D3EE"/>
+                </gradient>
+            </aapt:attr>
+        </path>
     </group>
-    <path android:pathData="M38,44 A3,3 0 0,1 41,41 H49 L52.5,44.5 H67 A3,3 0 0,1 70,47.5 V65 A3,3 0 0,1 67,68 H41 A3,3 0 0,1 38,65 Z" android:fillColor="#FFFFFFFF" android:strokeColor="#FFDCE6F2" android:strokeWidth="1"/>
-    <path android:pathData="M40.5,47.5 A1.5,1.5 0 0,1 42,46 H66 A1.5,1.5 0 0,1 67.5,47.5 V64 A1.5,1.5 0 0,1 66,65.5 H42 A1.5,1.5 0 0,1 40.5,64 Z"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="40.5" android:startY="46.0" android:endX="67.5" android:endY="65.5"><item android:offset="0" android:color="#FF3FA9F5"/><item android:offset="1" android:color="#FF5BD3E8"/></gradient></aapt:attr></path>
-    <group android:pivotX="33.5" android:pivotY="31.0" android:scaleX="0.38" android:scaleY="0.38" android:translateX="20.5" android:translateY="26.0">
-        <path android:pathData="M20,45 H45 A10,10 0 0,0 46,25.1 A13,13 0 0,0 21.3,28 A8.5,8.5 0 0,0 20,45 Z" android:fillColor="#FFFFFFFF"/>
-    </group>
-</group>
 </vector>

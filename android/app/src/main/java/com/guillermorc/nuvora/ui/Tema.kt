@@ -21,36 +21,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.guillermorc.nuvora.R
 
-// Los azules de Memories (y de la web de Nuvora)
-val Azul = Color(0xFF1565C0)
-val AzulOscuro = Color(0xFF003A99)
+// Los colores del icono «Nube N»: violeta → cian
+val Violeta = Color(0xFF7C5CFF)
+val Cian = Color(0xFF22D3EE)
+val VioletaOscuro = Color(0xFF4B2FD6)
 
 private val Claro = lightColorScheme(
-    primary = Azul, onPrimary = Color.White, primaryContainer = Color(0xFFDBE7FB), onPrimaryContainer = AzulOscuro,
-    secondary = AzulOscuro, background = Color(0xFFF4F6FA), onBackground = Color(0xFF1A2233),
-    surface = Color.White, onSurface = Color(0xFF1A2233), surfaceVariant = Color(0xFFEDF1F7),
-    onSurfaceVariant = Color(0xFF566173), outlineVariant = Color(0xFFE3E7EE), error = Color(0xFFC62828),
+    primary = Color(0xFF6C4DFF), onPrimary = Color.White, primaryContainer = Color(0xFFECE8FF), onPrimaryContainer = VioletaOscuro,
+    secondary = Color(0xFF0891B2), background = Color(0xFFF6F5FC), onBackground = Color(0xFF1B1D2A),
+    surface = Color.White, onSurface = Color(0xFF1B1D2A), surfaceVariant = Color(0xFFEFEEF8),
+    onSurfaceVariant = Color(0xFF5E6275), outlineVariant = Color(0xFFE2E1EE), error = Color(0xFFD93A44),
 )
 
 private val Oscuro = darkColorScheme(
-    primary = Color(0xFF8AB4F8), onPrimary = Color(0xFF002E6B), primaryContainer = Color(0xFF1B3A6B),
-    onPrimaryContainer = Color(0xFFDBE7FB), background = Color(0xFF0F131A), onBackground = Color(0xFFE3E7EE),
-    surface = Color(0xFF181D26), onSurface = Color(0xFFE3E7EE), surfaceVariant = Color(0xFF1E2430),
-    onSurfaceVariant = Color(0xFFAAB3C2), outlineVariant = Color(0xFF2A303B), error = Color(0xFFFF8A80),
+    primary = Color(0xFFA594FF), onPrimary = Color(0xFF21106B), primaryContainer = Color(0xFF2E2560),
+    onPrimaryContainer = Color(0xFFECE8FF), background = Color(0xFF0F0F17), onBackground = Color(0xFFE8E8F2),
+    surface = Color(0xFF181823), onSurface = Color(0xFFE8E8F2), surfaceVariant = Color(0xFF20202E),
+    onSurfaceVariant = Color(0xFFA6A8BC), outlineVariant = Color(0xFF2C2C3D), error = Color(0xFFFF8A8F),
 )
 
-val Caligrafica = FontFamily(Font(R.font.dancing_script, FontWeight.Bold))
-
-/** El degradado del logotipo «Nuvora» (como el de Memories). */
-val DegradadoLogo = Brush.horizontalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF6A3DE8), Color(0xFFC2185B), Color(0xFFFF7A2F)))
+/** El degradado del icono, para el logotipo y la cabecera. */
+val DegradadoLogo = Brush.linearGradient(listOf(Violeta, Cian))
 
 @Composable
 fun NuvoraTema(content: @Composable () -> Unit) {
@@ -59,14 +56,14 @@ fun NuvoraTema(content: @Composable () -> Unit) {
 
 @Composable
 fun Logotipo(tamano: TextUnit = 54.sp, color: Brush = DegradadoLogo) {
-    Text("Nuvora", style = TextStyle(brush = color, fontFamily = Caligrafica, fontSize = tamano, fontWeight = FontWeight.Bold))
+    Text("Nuvora", style = TextStyle(brush = color, fontSize = tamano, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.04).em))
 }
 
-/** Cabecera con el degradado azul de Memories. */
+/** Cabecera con el degradado del icono. */
 @Composable
 fun Cabecera(acciones: @Composable RowScope.() -> Unit = {}) {
     val oscuro = isSystemInDarkTheme()
-    val colores = if (oscuro) listOf(Color(0xFF0D2147), Color(0xFF06102A)) else listOf(Azul, Color(0xFF0D4FA8), AzulOscuro)
+    val colores = if (oscuro) listOf(Color(0xFF3A2A8F), Color(0xFF0E5566)) else listOf(Violeta, Color(0xFF5B7CFF), Color(0xFF1FB8D8))
     Box(
         Modifier
             .fillMaxWidth()
@@ -75,7 +72,7 @@ fun Cabecera(acciones: @Composable RowScope.() -> Unit = {}) {
             .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Logotipo(30.sp, Brush.linearGradient(listOf(Color.White, Color.White)))
+            Logotipo(24.sp, Brush.linearGradient(listOf(Color.White, Color.White)))
             Column(Modifier.weight(1f)) {}
             acciones()
         }
