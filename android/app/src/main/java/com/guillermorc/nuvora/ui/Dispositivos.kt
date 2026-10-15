@@ -53,6 +53,15 @@ import com.google.firebase.auth.FirebaseUser
 import com.guillermorc.nuvora.MainActivity
 import com.guillermorc.nuvora.sync.Carpeta
 import com.guillermorc.nuvora.sync.Dispositivos
+import com.guillermorc.nuvora.sync.Emparejar
+import com.guillermorc.nuvora.sync.Ordenador
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.LaunchedEffect
+import android.widget.Toast
 import com.guillermorc.nuvora.sync.EstadoDispositivo
 import com.guillermorc.nuvora.sync.SincronizacionService
 import com.guillermorc.nuvora.sync.Sincronizador
@@ -73,6 +82,7 @@ fun PantallaDispositivos(usuario: FirebaseUser) {
     val estado by Sincronizador.estado.collectAsState()
     val scope = rememberCoroutineScope()
     var quitar by remember { mutableStateOf<EstadoDispositivo?>(null) }
+    var anadirOrdenador by remember { mutableStateOf(false) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -135,6 +145,13 @@ fun PantallaDispositivos(usuario: FirebaseUser) {
             }
         }
         item {
+            OutlinedButton(onClick = { anadirOrdenador = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Computer, null)
+                Spacer(Modifier.size(8.dp))
+                Text("Añadir mi Mac u ordenador")
+            }
+        }
+        item {
             Tarjeta {
                 Row {
                     Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.primary)
@@ -148,6 +165,7 @@ fun PantallaDispositivos(usuario: FirebaseUser) {
             }
         }
     }
+    if (anadirOrdenador) DialogoOrdenador(usuario, estado.miId) { anadirOrdenador = false }
     quitar?.let { e ->
         AlertDialog(
             onDismissRequest = { quitar = null },
@@ -244,4 +262,89 @@ private fun Ajuste(titulo: String, detalle: String, valor: Boolean, cambiar: (Bo
         }
         Switch(checked = valor, onCheckedChange = cambiar)
     }
+}
+
+/** Buscar el Mac u ordenador en la wifi y emparejarlo con el código que enseña. */
+@Composable
+private fun DialogoOrdenador(usuario: FirebaseUser, miId: String?, onCerrar: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var buscando by remember { mutableStateOf(true) }
+    var encontrados by remember { mutableStateOf<List<Ordenador>>(emptyList()) }
+    var elegido by remember { mutableStateOf<Ordenador?>(null) }
+    var codigo by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var enviando by remember { mutableStateOf(false) }
+    var vuelta by remember { mutableStateOf(0) }
+    LaunchedEffect(vuelta) {
+        buscando = true
+        encontrados = runCatching { Emparejar.buscar() }.getOrDefault(emptyList())
+        if (encontrados.size == 1 && elegido == null) elegido = encontrados.first()
+        buscando = false
+    }
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("Añadir mi Mac u ordenador") },
+        text = {
+            Column {
+                val o = elegido
+                when {
+                    miId == null -> Text("Espera a que arranque la sincronización y vuelve a intentarlo.")
+                    o != null -> {
+                        Text("Escribe el código que aparece en ${o.nombre}, en Nuvora → Sincronización.")
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = codigo, onValueChange = { codigo = it.filter(Char::isDigit).take(6) },
+                            singleLine = true, label = { Text("Código de 6 cifras") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                    }
+                    buscando -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.size(12.dp))
+                        Text("Buscando Nuvora en tu wifi…")
+                    }
+                    encontrados.isEmpty() -> Text(
+                        "No encuentro ningún Mac u ordenador con Nuvora en esta wifi.\n\n" +
+                            "Abre Nuvora para Mac en el ordenador, con el móvil en la misma wifi, y vuelve a buscar.",
+                    )
+                    else -> encontrados.forEach { e ->
+                        TextButton(onClick = { elegido = e }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Outlined.Computer, null)
+                            Spacer(Modifier.size(8.dp))
+                            Text(e.nombre, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            val o = elegido
+            if (o != null && miId != null) {
+                Button(enabled = codigo.length == 6 && !enviando, onClick = {
+                    enviando = true
+                    error = null
+                    scope.launch {
+                        try {
+                            val (id, nombre) = Emparejar.emparejar(o, codigo, miId, Dispositivos.nombreDeEste())
+                            Dispositivos.registrar(usuario.uid, id, nombre, "mac")
+                            Toast.makeText(context, "$nombre emparejado: la carpeta Nuvora ya se sincroniza", Toast.LENGTH_LONG).show()
+                            onCerrar()
+                        } catch (e: Exception) {
+                            error = e.message ?: "No se pudo emparejar"
+                        } finally {
+                            enviando = false
+                        }
+                    }
+                }) { Text(if (enviando) "Emparejando…" else "Emparejar") }
+            } else if (!buscando && miId != null) {
+                TextButton(onClick = { vuelta++ }) { Text("Buscar otra vez") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onCerrar) { Text("Cancelar") } },
+    )
 }

@@ -255,6 +255,7 @@ function connectEvents() {
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'shared') toast(`${msg.by} compartió «${msg.name}» contigo`);
+    if (msg.type === 'emparejado') { toast(`${msg.nombre || 'Un móvil'} se ha emparejado con este ordenador`); if (state.view === 'sync') renderSync(); }
     pulseRing();
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => { if (state.view !== 'sync') load(true); refreshMe(); }, 250);
@@ -1161,6 +1162,41 @@ const SENTIDOS = [
 const syncOpts = { sentido: 'ambos', borrar: true, intervalo: '10', carpeta: '~/Nuvora' };
 try { Object.assign(syncOpts, JSON.parse(localStorage.getItem('nuvora-sync') || '{}')); } catch { /* sin almacenamiento */ }
 
+// Emparejar este ordenador con tus móviles (solo si tiene Syncthing, como la app de Mac)
+async function pintarMoviles() {
+  const caja = $('#moviles');
+  if (!caja) return;
+  let cfg;
+  try { cfg = await api('GET', '/api/config'); } catch { return; }
+  if (!cfg.syncthing) return;
+  let codigo, estado;
+  try {
+    [codigo, estado] = await Promise.all([api('GET', '/api/emparejar/codigo'), api('GET', '/api/emparejar/estado')]);
+  } catch (err) {
+    caja.innerHTML = `<div class="feature" style="margin-bottom:22px">${icon('sync')}<b>Sincronización con móviles</b><span class="muted small">${esc(err.message)}</span></div>`;
+    return;
+  }
+  const lista = estado.dispositivos.map((d) => `<div class="person">
+      <span class="avatar sm" style="background:${d.conectado ? '#2BB673' : '#9CA3AF'}">${icon('devices')}</span>
+      <div class="who"><b>${esc(d.nombre)}</b><span>${d.conectado ? 'Conectado' : 'Sin conexión ahora'}</span></div>
+      <button class="icon-btn" data-quitar="${esc(d.id)}" title="Dejar de sincronizar">${icon('close')}</button></div>`).join('');
+  caja.innerHTML = `
+    <h2>Tus móviles</h2>
+    <p class="muted">La carpeta <b>${esc(estado.carpeta)}</b> de este ordenador se sincroniza directamente con la app Nuvora de tus móviles.</p>
+    <div class="ap-title">Emparejar un móvil</div>
+    <p class="muted small" style="margin-top:0">En el móvil, con la misma wifi: <b>Nuvora → Dispositivos → Añadir mi Mac u ordenador</b>, y escribe este código:</p>
+    <div class="codigo">${esc(codigo.codigo.replace(/(\d{3})(\d{3})/, '$1 $2'))}</div>
+    <button class="btn ghost" id="otro-codigo">Otro código</button>
+    ${lista ? `<div class="ap-title">Emparejados</div><div class="people">${lista}</div>` : ''}
+    <p class="note">Tus otros móviles se añaden solos a través del primero. ${estado.pendientes ? `Recibiendo ${estado.pendientes} archivos…` : ''}</p>
+    <hr style="border:0;border-top:1px solid var(--border);margin:26px 0 18px">`;
+  $('#otro-codigo').onclick = async () => { await attempt(() => api('POST', '/api/emparejar/codigo')); pintarMoviles(); };
+  caja.querySelectorAll('[data-quitar]').forEach((b) => b.onclick = async () => {
+    await attempt(() => api('DELETE', `/api/emparejar/${b.dataset.quitar}`), 'Ese móvil ya no se sincroniza con este ordenador');
+    pintarMoviles();
+  });
+}
+
 function renderSync() {
   const origin = location.origin;
   const carpeta = () => { const c = syncOpts.carpeta || '~/Nuvora'; return /\s/.test(c) ? `"${c}"` : c; };
@@ -1168,7 +1204,7 @@ function renderSync() {
     syncOpts.sentido !== 'ambos' ? `--sentido ${syncOpts.sentido}` : '',
     !syncOpts.borrar ? '--borrar no' : '',
     syncOpts.intervalo !== '10' ? `--intervalo ${syncOpts.intervalo}` : ''].filter(Boolean).join(' ');
-  $('#content').innerHTML = `<div class="sync-page">
+  $('#content').innerHTML = `<div class="sync-page"><div id="moviles"></div>
     <h2>Sincroniza una carpeta de tu ordenador</h2>
     <p class="muted">Con el cliente <b>nuvora-sync</b> una carpeta de tu ordenador se mantiene al día con «Mi unidad».
       Elige cómo quieres que funcione y copia la orden.</p>
@@ -1205,6 +1241,7 @@ function renderSync() {
       <div class="feature">${icon('restore')}<b>Papelera</b><span class="muted small">Lo que se borra en el ordenador se puede recuperar en Nuvora.</span></div>
     </div>
   </div>`;
+  pintarMoviles();
   const page = $('.sync-page');
   const save = () => {
     try { localStorage.setItem('nuvora-sync', JSON.stringify(syncOpts)); } catch { /* sin almacenamiento */ }

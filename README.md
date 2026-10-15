@@ -132,6 +132,17 @@ así que la primera vez hay que hacer **clic derecho → Abrir**, o en *Ajustes 
 Abrir igualmente*. Si macOS pregunta si Nuvora puede aceptar conexiones entrantes, di que sí: es lo que permite que
 el móvil se conecte. Registros en `~/Library/Logs/Nuvora`.
 
+## El Mac con tus móviles (Syncthing)
+
+La app de Mac lleva **Syncthing** dentro: su carpeta `~/Nuvora` se sincroniza directamente con la app Nuvora de tus
+móviles, igual que los móviles entre sí. Para emparejarlos (una vez):
+
+1. En el Mac: Nuvora → **Sincronización**, donde aparece un **código de 6 cifras**.
+2. En el móvil, con la misma wifi: **Dispositivos → Añadir mi Mac u ordenador**; lo encuentra solo, escribes el código y listo.
+
+El móvil queda como «introductor» del Mac, así que tus otros móviles se añaden solos. Además, la ventana del Mac
+sincroniza `~/Nuvora` con tu cuenta del servidor, así que lo que llega de los móviles también se ve en la web.
+
 ## App de Android
 
 `android/` es la app para el móvil (Kotlin, sin dependencias): abre tu servidor Nuvora con todo lo de la web

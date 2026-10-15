@@ -40,6 +40,14 @@ object Dispositivos {
         context.getSharedPreferences("sync", Context.MODE_PRIVATE).edit().putString("miId", miId).apply()
     }
 
+    /** Apunta otro dispositivo (un Mac u ordenador emparejado) en tu lista. */
+    suspend fun registrar(uid: String, id: String, nombre: String, plataforma: String) {
+        coleccion(uid).document(id).set(
+            mapOf("nombre" to nombre, "plataforma" to plataforma, "visto" to FieldValue.serverTimestamp()),
+            SetOptions.merge(),
+        ).await()
+    }
+
     suspend fun quitar(uid: String, id: String) {
         runCatching { coleccion(uid).document(id).delete().await() }
     }

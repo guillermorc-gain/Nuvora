@@ -1,8 +1,9 @@
 // Nuvora para Mac (Apple Silicon).
 //
-// La app lleva dentro el servidor de Nuvora y Node.js: al abrirla arranca el
-// servidor (tus archivos se guardan en este Mac), lo muestra en su ventana y
-// sincroniza la carpeta ~/Nuvora con tu cuenta. Se queda en la barra de menús
+// La app lleva dentro el servidor de Nuvora, Node.js y Syncthing: al abrirla
+// arranca el servidor (tus archivos se guardan en este Mac), lo muestra en su
+// ventana, sincroniza la carpeta ~/Nuvora con tu cuenta y, por Syncthing,
+// directamente con la app Nuvora de tus móviles (se emparejan con un código). Se queda en la barra de menús
 // para que el móvil y los demás dispositivos lo encuentren aunque cierres la ventana.
 //
 // Se compila en GitHub Actions (workflow «Publicar versión», trabajo «mac»):
@@ -104,6 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
             p.environment = self.entorno([
                 "NUVORA_APP": "1",
                 "PORT": String(self.puerto),
+                // Syncthing dentro de la app: ~/Nuvora se sincroniza directamente con tus móviles
+                "NUVORA_SYNCTHING": self.recursos.appendingPathComponent("syncthing/syncthing").path,
+                "NUVORA_SYNCTHING_HOME": self.soporte.appendingPathComponent("syncthing").path,
+                "NUVORA_CARPETA": self.carpeta.path,
                 "NUVORA_DATA": self.soporte.appendingPathComponent("datos").path,
             ])
             let log = self.registro("servidor.log")

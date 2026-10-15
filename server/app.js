@@ -357,7 +357,26 @@ function createApp(options = {}) {
 
   // Lo que la web necesita saber antes de iniciar sesión
   // (la app de Android la usa también para encontrar el servidor en la wifi)
-  app.get('/api/config', (req, res) => res.json({ nuvora: true, nombre: require('node:os').hostname(), googleClientId: google.clientId }));
+  const st = options.syncthing || null;
+  app.get('/api/config', (req, res) => res.json({
+    nuvora: true, nombre: require('node:os').hostname().replace(/\.local$/, ''), googleClientId: google.clientId, syncthing: !!st,
+  }));
+
+  // ----- Emparejar este ordenador con tus móviles (Syncthing) -----
+  const conSyncthing = (req, res, next) => {
+    if (!st || !st.miId) return next(new HttpError(503, 'La sincronización con móviles no está activa en este ordenador'));
+    next();
+  };
+  // El código lo ve quien ha entrado en este ordenador; el móvil lo escribe al emparejarse
+  app.get('/api/emparejar/codigo', auth, conSyncthing, (req, res) => res.json({ codigo: st.codigo, id: st.miId }));
+  app.post('/api/emparejar/codigo', auth, conSyncthing, (req, res) => { st.nuevoCodigo(); res.json({ codigo: st.codigo }); });
+  app.post('/api/emparejar', conSyncthing, wrap(async (req, res) => {
+    res.json(await st.emparejar(req.body || {}));
+    // Avisar a la ventana de este ordenador para que lo enseñe
+    for (const set of listeners.values()) for (const r of set) r.write(`data: ${JSON.stringify({ type: 'emparejado', nombre: (req.body || {}).nombre })}\n\n`);
+  }));
+  app.get('/api/emparejar/estado', auth, conSyncthing, wrap(async (req, res) => res.json(await st.estado())));
+  app.delete('/api/emparejar/:id', auth, conSyncthing, wrap(async (req, res) => { await st.quitar(req.params.id); res.json({ ok: true }); }));
 
   // ----- Iniciar sesión con Google (las mismas cuentas que Memories) -----
   app.post('/api/auth/google', wrap(async (req, res) => {

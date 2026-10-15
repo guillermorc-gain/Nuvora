@@ -9,7 +9,23 @@ const host = process.env.HOST || '0.0.0.0';
 const dataDir = process.env.NUVORA_DATA || path.join(__dirname, '..', 'data');
 const quotaGb = Number(process.env.NUVORA_QUOTA_GB) || 15;
 
-const app = createApp({ dataDir, quota: quotaGb * 1024 ** 3 });
+// Syncthing (lo pone la app de Mac): la carpeta ~/Nuvora se sincroniza con tus móviles
+let syncthing = null;
+if (process.env.NUVORA_SYNCTHING) {
+  const { SyncthingLocal } = require('./syncthing');
+  syncthing = new SyncthingLocal({
+    binario: process.env.NUVORA_SYNCTHING,
+    home: process.env.NUVORA_SYNCTHING_HOME || path.join(dataDir, 'syncthing'),
+    carpeta: process.env.NUVORA_CARPETA || path.join(os.homedir(), 'Nuvora'),
+  });
+  syncthing.arrancar()
+    .then((id) => console.log(`   Syncthing listo: ${id.slice(0, 7)}… (carpeta ${syncthing.carpeta})`))
+    .catch((err) => console.error('   No se pudo arrancar Syncthing:', err.message));
+  process.on('exit', () => syncthing.parar());
+  for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { syncthing.parar(); process.exit(0); });
+}
+
+const app = createApp({ dataDir, quota: quotaGb * 1024 ** 3, syncthing });
 app.listen(port, host, () => {
   console.log(`☁  Nuvora funcionando en http://localhost:${port}`);
   // Direcciones de la red local, para conectar la app de Android

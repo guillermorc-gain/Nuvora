@@ -225,6 +225,15 @@ jobs:
           cp "${NODE%.tar.gz}/LICENSE" "$APP/Contents/Resources/node/LICENSE"
           "$APP/Contents/Resources/node/bin/node" --version
 
+          # Syncthing oficial para Apple Silicon (el mismo que los móviles): ~/Nuvora ↔ móviles
+          curl -fsSL -o st.zip https://github.com/syncthing/syncthing/releases/download/v2.1.5/syncthing-macos-arm64-v2.1.5.zip
+          unzip -q st.zip
+          mkdir -p "$APP/Contents/Resources/syncthing"
+          cp syncthing-macos-arm64-v2.1.5/syncthing "$APP/Contents/Resources/syncthing/syncthing"
+          cp syncthing-macos-arm64-v2.1.5/LICENSE.txt "$APP/Contents/Resources/syncthing/LICENSE.txt" 2>/dev/null || true
+          chmod +x "$APP/Contents/Resources/syncthing/syncthing"
+          "$APP/Contents/Resources/syncthing/syncthing" --version
+
       # Prueba de humo: abrir la app y comprobar que su servidor arranca y responde
       - name: Probar la app
         run: |
@@ -233,7 +242,12 @@ jobs:
             if curl -fsS http://localhost:3000/api/config | grep -q '"nuvora":true'; then echo "✓ El servidor de la app responde"; OK=1; break; fi
             sleep 1
           done
-          curl -fsS -X POST -H 'Content-Type: application/json' -d '{"name":"Prueba","email":"prueba@nuvora.app","password":"contraseña-larga","client":"ci"}' http://localhost:3000/api/auth/register | grep -q token && echo "✓ Se puede crear una cuenta"
+          TOKEN=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"name":"Prueba","email":"prueba@nuvora.app","password":"contraseña-larga","client":"ci"}' http://localhost:3000/api/auth/register | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])") && echo "✓ Se puede crear una cuenta"
+          for i in $(seq 1 30); do
+            if curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/emparejar/codigo | grep -q codigo; then echo "✓ Syncthing de la app listo para emparejar móviles"; ST=1; break; fi
+            sleep 1
+          done
+          [ "${ST:-}" = 1 ] || { echo "::error::Syncthing de la app no arrancó"; pkill -x Nuvora; exit 1; }
           ls ~/Library/Logs/Nuvora/ && tail -5 ~/Library/Logs/Nuvora/servidor.log || true
           pkill -x Nuvora || true
           sleep 2
@@ -248,6 +262,7 @@ jobs:
           APP=dist/Nuvora.app
           FIRMA="${MAC_IDENTIDAD:--}"
           codesign --force --sign "$FIRMA" "$APP/Contents/Resources/node/bin/node"
+          codesign --force --sign "$FIRMA" "$APP/Contents/Resources/syncthing/syncthing"
           codesign --force --sign "$FIRMA" "$APP"
           codesign --verify --deep --strict "$APP"
           mkdir dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Aplicaciones
