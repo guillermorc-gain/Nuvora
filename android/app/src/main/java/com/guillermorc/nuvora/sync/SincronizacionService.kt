@@ -13,6 +13,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import com.google.firebase.auth.FirebaseAuth
+import com.guillermorc.nuvora.Actualizador
 import com.guillermorc.nuvora.R
 import com.guillermorc.nuvora.ui.AppActivity
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -89,6 +90,7 @@ class SincronizacionService : Service() {
 /** Al encender el móvil o actualizar la app, vuelve a sincronizar. */
 class ArranqueReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) Actualizador.avisarActualizada(context)
         val prefs = context.getSharedPreferences("ajustes", Context.MODE_PRIVATE)
         if (prefs.getBoolean("segundoPlano", true)) SincronizacionService.arrancar(context)
     }

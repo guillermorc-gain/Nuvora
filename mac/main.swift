@@ -32,6 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     private var saliendo = false
     private var senal: DispatchSourceSignal?
     private var cargado = false
+    private var actualizando = false
+    private var avisadaVersion = 0
+    private var progresoVentana: NSPanel?
+    private var progresoBarra: NSProgressIndicator?
+    private var progresoTexto: NSTextField?
+    private var observador: NSKeyValueObservation?
 
     private var recursos: URL { Bundle.main.resourceURL! }
     private var node: URL { recursos.appendingPathComponent("node/bin/node") }
@@ -63,6 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         esperarServidor(intentos: 80)
         // La sesión de la ventana decide qué cuenta sincroniza la carpeta ~/Nuvora
         Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in self?.revisarSesion() }
+        // Actualizaciones: al abrir y cada 6 horas se mira si hay una versión nueva en GitHub
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.buscarActualizacion(manual: false) }
+        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.buscarActualizacion(manual: false) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -254,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         lineaEstado.isEnabled = false
         menu.addItem(lineaEstado)
         menu.addItem(withTitle: "Dirección para el móvil…", action: #selector(direccionMovil), keyEquivalent: "")
+        menu.addItem(withTitle: "Buscar actualizaciones…", action: #selector(buscarActualizacionManual), keyEquivalent: "")
         menu.addItem(.separator())
         opcionInicio = NSMenuItem(title: "Abrir al iniciar el Mac", action: #selector(alternarInicio), keyEquivalent: "")
         opcionInicio.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -311,6 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         let app = NSMenuItem()
         let menuApp = NSMenu()
         menuApp.addItem(withTitle: "Acerca de Nuvora", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        menuApp.addItem(withTitle: "Buscar actualizaciones…", action: #selector(buscarActualizacionManual), keyEquivalent: "")
         menuApp.addItem(.separator())
         menuApp.addItem(withTitle: "Ocultar Nuvora", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         menuApp.addItem(withTitle: "Salir de Nuvora", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -348,6 +359,207 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     }
 
     @objc private func recargar() { if cargado { web.reload() } }
+
+    // MARK: - Actualizaciones (desde dentro de la app)
+
+    private struct Nueva { let numero: Int; let nombre: String; let url: URL; let notas: String }
+
+    private var versionActual: Int { Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0 }
+    private var nombreActual: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?" }
+
+    @objc private func buscarActualizacionManual() { buscarActualizacion(manual: true) }
+
+    private func buscarActualizacion(manual: Bool) {
+        guard !actualizando else { return mostrarProgreso() }
+        var peticion = URLRequest(url: URL(string: "https://api.github.com/repos/guillermorc-gain/Nuvora/releases/latest")!)
+        peticion.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        peticion.timeoutInterval = 15
+        URLSession.shared.dataTask(with: peticion) { [weak self] datos, respuesta, _ in
+            let nueva = Self.leerVersion(datos, respuesta)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let n = nueva, n.numero > self.versionActual {
+                    // Solo se insiste una vez por versión; con «Buscar actualizaciones…» siempre
+                    if manual || n.numero != self.avisadaVersion { self.ofrecer(n) }
+                } else if manual {
+                    if datos == nil { self.avisar("No se pudo comprobar", "¿Tiene internet este Mac?") }
+                    else { self.avisar("Nuvora está al día", "Tienes la última versión (\(self.nombreActual)).") }
+                }
+            }
+        }.resume()
+    }
+
+    private static func leerVersion(_ datos: Data?, _ respuesta: URLResponse?) -> Nueva? {
+        guard (respuesta as? HTTPURLResponse)?.statusCode == 200, let datos,
+              let j = try? JSONSerialization.jsonObject(with: datos) as? [String: Any],
+              let etiqueta = j["tag_name"] as? String,
+              let numero = Int(etiqueta.split(separator: ".").last ?? ""),
+              let assets = j["assets"] as? [[String: Any]],
+              // El .dmg se sube unos minutos después de crear la versión: sin él, aún no hay nada que instalar
+              let dmg = assets.first(where: { $0["name"] as? String == "Nuvora-Mac.dmg" }),
+              let texto = dmg["browser_download_url"] as? String, let url = URL(string: texto) else { return nil }
+        let cuerpo = j["body"] as? String ?? ""
+        let novedades = (cuerpo.components(separatedBy: "## Novedades").dropFirst().first ?? "")
+            .components(separatedBy: "## ").first ?? ""
+        let notas = novedades.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("- ") }.prefix(8).map { "• " + String($0.dropFirst(2)) }.joined(separator: "\n")
+        return Nueva(numero: numero, nombre: String(etiqueta.dropFirst()), url: url, notas: notas)
+    }
+
+    private func ofrecer(_ n: Nueva) {
+        avisadaVersion = n.numero
+        let a = NSAlert()
+        a.messageText = "Nuvora \(n.nombre) está disponible"
+        a.informativeText = "Tienes la \(nombreActual). Se descarga e instala sola y Nuvora se vuelve a abrir." +
+            (n.notas.isEmpty ? "" : "\n\nNovedades:\n\(n.notas)")
+        a.addButton(withTitle: "Actualizar")
+        a.addButton(withTitle: "Más tarde")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn { descargar(n) }
+    }
+
+    private func mostrarProgreso() {
+        if progresoVentana == nil {
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 96),
+                                styleMask: [.titled], backing: .buffered, defer: false)
+            panel.title = "Actualizando Nuvora"
+            let texto = NSTextField(labelWithString: "Descargando…")
+            texto.frame = NSRect(x: 20, y: 56, width: 320, height: 20)
+            let barra = NSProgressIndicator(frame: NSRect(x: 20, y: 24, width: 320, height: 20))
+            barra.isIndeterminate = false
+            barra.minValue = 0
+            barra.maxValue = 1
+            panel.contentView?.addSubview(texto)
+            panel.contentView?.addSubview(barra)
+            panel.isReleasedWhenClosed = false
+            panel.center()
+            progresoVentana = panel
+            progresoBarra = barra
+            progresoTexto = texto
+        }
+        progresoVentana?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func fallo(_ texto: String) {
+        actualizando = false
+        observador = nil
+        progresoVentana?.orderOut(nil)
+        avisar("No se pudo actualizar", texto)
+    }
+
+    private func descargar(_ n: Nueva) {
+        actualizando = true
+        mostrarProgreso()
+        progresoTexto?.stringValue = "Descargando Nuvora \(n.nombre)…"
+        progresoBarra?.doubleValue = 0
+        let tarea = URLSession.shared.downloadTask(with: n.url) { [weak self] archivo, respuesta, error in
+            // El archivo temporal se borra al salir de aquí: se mueve antes de nada
+            var dmg: URL?
+            if let archivo, (respuesta as? HTTPURLResponse)?.statusCode == 200 {
+                let destino = FileManager.default.temporaryDirectory.appendingPathComponent("Nuvora-\(n.nombre).dmg")
+                try? FileManager.default.removeItem(at: destino)
+                if (try? FileManager.default.moveItem(at: archivo, to: destino)) != nil { dmg = destino }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let dmg else { return self.fallo(error?.localizedDescription ?? "La descarga no terminó. Inténtalo otra vez.") }
+                self.instalar(dmg, n)
+            }
+        }
+        observador = tarea.progress.observe(\.fractionCompleted) { [weak self] p, _ in
+            DispatchQueue.main.async {
+                self?.progresoBarra?.doubleValue = p.fractionCompleted
+                self?.progresoTexto?.stringValue = "Descargando Nuvora \(n.nombre)… \(Int(p.fractionCompleted * 100)) %"
+            }
+        }
+        tarea.resume()
+    }
+
+    @discardableResult
+    private func ejecutar(_ programa: String, _ argumentos: [String]) -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: programa)
+        p.arguments = argumentos
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return -1 }
+        p.waitUntilExit()
+        return p.terminationStatus
+    }
+
+    private func instalar(_ dmg: URL, _ n: Nueva) {
+        progresoTexto?.stringValue = "Instalando Nuvora \(n.nombre)…"
+        progresoBarra?.isIndeterminate = true
+        progresoBarra?.startAnimation(nil)
+        let trabajo = soporte.appendingPathComponent("actualizacion")
+        let montaje = trabajo.appendingPathComponent("dmg")
+        let nueva = trabajo.appendingPathComponent("Nuvora.app")
+        // Dónde está la app ahora. Si se abrió desde el .dmg o desde Descargas sin moverla
+        // (macOS la «traslada» a una carpeta temporal), se instala en Aplicaciones.
+        var destino = Bundle.main.bundleURL
+        if destino.path.hasPrefix("/Volumes/") || destino.path.contains("/AppTranslocation/") {
+            destino = URL(fileURLWithPath: "/Applications/Nuvora.app")
+        }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        DispatchQueue.global().async { [weak self] in
+            guard let self else { return }
+            let fm = FileManager.default
+            try? fm.removeItem(at: trabajo)
+            try? fm.createDirectory(at: montaje, withIntermediateDirectories: true)
+            var error: String?
+            if self.ejecutar("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", montaje.path, dmg.path]) != 0 {
+                error = "No se pudo abrir el .dmg descargado."
+            } else {
+                if self.ejecutar("/usr/bin/ditto", [montaje.appendingPathComponent("Nuvora.app").path, nueva.path]) != 0 {
+                    error = "No se pudo copiar la versión nueva."
+                }
+                self.ejecutar("/usr/bin/hdiutil", ["detach", "-force", montaje.path])
+            }
+            try? fm.removeItem(at: dmg)
+            let info = NSDictionary(contentsOf: nueva.appendingPathComponent("Contents/Info.plist"))
+            if error == nil, Int(info?["CFBundleVersion"] as? String ?? "") != n.numero { error = "La descarga no es la versión esperada." }
+            if error == nil, !fm.isWritableFile(atPath: destino.deletingLastPathComponent().path) {
+                error = "No hay permiso para escribir en \(destino.deletingLastPathComponent().path). Arrastra Nuvora a tu carpeta Aplicaciones y vuelve a intentarlo."
+            }
+            DispatchQueue.main.async {
+                if let error { return self.fallo(error) }
+                self.relanzar(nueva: nueva, destino: destino, pid: pid)
+            }
+        }
+    }
+
+    /// Un pequeño script espera a que Nuvora se cierre, pone la versión nueva en su sitio y la vuelve a abrir.
+    private func relanzar(nueva: URL, destino: URL, pid: Int32) {
+        func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let viejo = destino.path + ".anterior"
+        let script = """
+        #!/bin/sh
+        while kill -0 \(pid) 2>/dev/null; do sleep 0.3; done
+        # Que el servidor y Syncthing de la versión anterior suelten sus puertos
+        for i in $(seq 1 30); do nc -z 127.0.0.1 \(puerto) 2>/dev/null || break; sleep 0.5; done
+        rm -rf \(q(viejo))
+        [ -e \(q(destino.path)) ] && mv \(q(destino.path)) \(q(viejo))
+        if ditto \(q(nueva.path)) \(q(destino.path)); then rm -rf \(q(viejo)); else rm -rf \(q(destino.path)); mv \(q(viejo)) \(q(destino.path)); fi
+        xattr -dr com.apple.quarantine \(q(destino.path)) 2>/dev/null
+        rm -rf \(q(nueva.deletingLastPathComponent().path))
+        open \(q(destino.path))
+        """
+        let archivo = fm.temporaryDirectory.appendingPathComponent("nuvora-actualizar.sh")
+        do {
+            try script.write(to: archivo, atomically: true, encoding: .utf8)
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = [archivo.path]
+            p.standardOutput = registro("actualizacion.log")
+            p.standardError = registro("actualizacion.log")
+            try p.run()
+        } catch {
+            return fallo(error.localizedDescription)
+        }
+        progresoTexto?.stringValue = "Reiniciando Nuvora…"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { NSApp.terminate(nil) }
+    }
 
     // MARK: - Lo que pide la página (window.NuvoraMac)
 

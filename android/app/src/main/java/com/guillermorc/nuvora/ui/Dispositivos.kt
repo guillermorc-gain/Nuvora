@@ -243,6 +243,7 @@ fun PantallaAjustes(usuario: FirebaseUser, onSalir: () -> Unit) {
                 }
             }
         }
+        item { Tarjeta { FilaVersion() } }
         item {
             OutlinedButton(onClick = onSalir, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.Logout, null)

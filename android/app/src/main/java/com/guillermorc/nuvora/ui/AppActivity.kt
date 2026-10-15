@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.auth.FirebaseUser
+import com.guillermorc.nuvora.Actualizador
 import com.guillermorc.nuvora.Cuenta
 import com.guillermorc.nuvora.LoginCancelado
 import com.guillermorc.nuvora.MainActivity
@@ -198,7 +199,10 @@ private fun PantallaPrincipal(usuario: FirebaseUser, onSalir: () -> Unit) {
     LaunchedEffect(usuario.uid) {
         if (Build.VERSION.SDK_INT >= 33) avisos.launch(Manifest.permission.POST_NOTIFICATIONS)
         SincronizacionService.arrancar(context)
+        // ¿Hay una versión nueva en GitHub? Se avisa y se actualiza sin salir
+        Actualizador.buscar(silencioso = true)
     }
+    DialogoActualizacion()
     Scaffold(
         topBar = { Cabecera { EstadoCabecera() } },
         bottomBar = {
