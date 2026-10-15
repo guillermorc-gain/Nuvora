@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.AlertDialog
@@ -186,6 +187,8 @@ fun PantallaAjustes(usuario: FirebaseUser, onSalir: () -> Unit) {
     var soloWifi by remember { mutableStateOf(prefs.getBoolean("soloWifi", false)) }
     var segundoPlano by remember { mutableStateOf(prefs.getBoolean("segundoPlano", true)) }
     val ocupado = remember { formatoTamano(Carpeta.tamano(Carpeta.raiz(context))) }
+    var apariencia by remember { mutableStateOf(false) }
+    if (apariencia) DialogoApariencia(onCerrar = { apariencia = false })
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Tarjeta {
@@ -202,6 +205,22 @@ fun PantallaAjustes(usuario: FirebaseUser, onSalir: () -> Unit) {
                         Text(usuario.displayName ?: "Tu cuenta", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                         Text(usuario.email ?: "", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            }
+        }
+        item {
+            Tarjeta {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Palette, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.size(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Apariencia", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${TEMAS[Apariencia.tema]?.nombre} · ${MODOS[Apariencia.modo]} · ${LETRAS[Apariencia.letra]?.first}",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { apariencia = true }) { Text("Cambiar") }
                 }
             }
         }

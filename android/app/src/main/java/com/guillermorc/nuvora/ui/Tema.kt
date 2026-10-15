@@ -1,7 +1,6 @@
 package com.guillermorc.nuvora.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -51,7 +53,15 @@ val DegradadoLogo = Brush.linearGradient(listOf(Violeta, Cian))
 
 @Composable
 fun NuvoraTema(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Oscuro else Claro, content = content)
+    val oscuro = Apariencia.oscuro()
+    val densidad = LocalDensity.current
+    MaterialTheme(
+        colorScheme = Apariencia.esquema(oscuro, if (oscuro) Oscuro else Claro),
+        typography = tipografia(Apariencia.familia),
+    ) {
+        // Tamaño del texto de Apariencia, encima del que tengas en Android
+        CompositionLocalProvider(LocalDensity provides Density(densidad.density, densidad.fontScale * Apariencia.escala), content = content)
+    }
 }
 
 @Composable
@@ -62,8 +72,7 @@ fun Logotipo(tamano: TextUnit = 54.sp, color: Brush = DegradadoLogo) {
 /** Cabecera con el degradado del icono. */
 @Composable
 fun Cabecera(acciones: @Composable RowScope.() -> Unit = {}) {
-    val oscuro = isSystemInDarkTheme()
-    val colores = if (oscuro) listOf(Color(0xFF3A2A8F), Color(0xFF0E5566)) else listOf(Violeta, Color(0xFF5B7CFF), Color(0xFF1FB8D8))
+    val colores = Apariencia.cabecera()
     Box(
         Modifier
             .fillMaxWidth()

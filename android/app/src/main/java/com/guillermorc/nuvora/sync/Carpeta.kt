@@ -51,6 +51,26 @@ object Carpeta {
         return n
     }
 
+    /** Todo lo de Nuvora (sin las carpetas internas de Syncthing como .stversions). */
+    private fun todo(raiz: File): Sequence<File> = raiz.walkTopDown()
+        .onEnter { it == raiz || !it.name.startsWith(".") }
+        .filter { it != raiz && !it.name.startsWith(".") && !it.name.endsWith(".tmp") }
+
+    /** Los últimos archivos que han cambiado (aquí o en otro dispositivo). */
+    fun recientes(raiz: File, cuantos: Int = 60): List<File> =
+        todo(raiz).filter { it.isFile }.sortedByDescending { it.lastModified() }.take(cuantos).toList()
+
+    private fun normalizar(s: String) =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+
+    /** Busca por nombre en todas las carpetas, sin importar tildes ni mayúsculas. */
+    fun buscar(raiz: File, texto: String): List<File> {
+        val q = normalizar(texto.trim())
+        if (q.isEmpty()) return emptyList()
+        return todo(raiz).filter { normalizar(it.name).contains(q) }
+            .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() }).take(200).toList()
+    }
+
     fun tamano(f: File): Long = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length()
 }
 

@@ -66,6 +66,7 @@ import com.guillermorc.nuvora.LoginCancelado
 import com.guillermorc.nuvora.MainActivity
 import com.guillermorc.nuvora.R
 import com.guillermorc.nuvora.sync.Carpeta
+import com.guillermorc.nuvora.sync.Destacados
 import com.guillermorc.nuvora.sync.SincronizacionService
 import com.guillermorc.nuvora.sync.Sincronizador
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,8 @@ class AppActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Apariencia.cargar(this)
+        Destacados.cargar(this)
         setContent {
             NuvoraTema {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
