@@ -8,6 +8,7 @@ const { openDatabase } = require('./db');
 const { BlobStore } = require('./storage');
 const { streamZip } = require('./zip');
 const { hashPassword, verifyPassword, randomToken } = require('./security');
+const { createGoogleVerifier } = require('./google');
 
 const DAY = 24 * 60 * 60 * 1000;
 const SESSION_TTL = 30 * DAY;
@@ -59,6 +60,9 @@ function createApp(options = {}) {
   const secretFile = path.join(dataDir, 'secret');
   if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, randomToken(48), { mode: 0o600 });
   const secret = fs.readFileSync(secretFile, 'utf8');
+  const google = createGoogleVerifier(options.google || {
+    clientIds: (process.env.NUVORA_GOOGLE_CLIENT_ID || '').split(',').map((x) => x.trim()).filter(Boolean),
+  });
 
   // ---------- Consultas preparadas ----------
   const q = {
@@ -158,7 +162,7 @@ function createApp(options = {}) {
   }
 
   function userSummary(u) {
-    return u && { id: u.id, name: u.name, email: u.email, color: u.color };
+    return u && { id: u.id, name: u.name, email: u.email, color: u.color, foto: u.foto || null };
   }
 
   function serialize(node, user, extra = {}) {
@@ -315,7 +319,7 @@ function createApp(options = {}) {
   }
 
   function meResponse(user) {
-    return { ...userSummary(user), quota: user.quota, used: q.usage.get(user.id).used };
+    return { ...userSummary(user), google: !!user.google_sub, quota: user.quota, used: q.usage.get(user.id).used };
   }
 
   // ----- Autenticación -----
@@ -351,6 +355,68 @@ function createApp(options = {}) {
   });
 
   app.get('/api/me', auth, (req, res) => res.json(meResponse(req.user)));
+
+  // Lo que la web necesita saber antes de iniciar sesión
+  app.get('/api/config', (req, res) => res.json({ googleClientId: google.clientId }));
+
+  // ----- Iniciar sesión con Google (las mismas cuentas que Memories) -----
+  app.post('/api/auth/google', wrap(async (req, res) => {
+    let datos;
+    try {
+      datos = await google.verify(req.body && req.body.credential);
+    } catch (err) {
+      throw new HttpError(401, err.message);
+    }
+    const mail = String(datos.email).toLowerCase();
+    let user = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(datos.sub) || q.userByEmail.get(mail);
+    if (user) {
+      // Una cuenta de correo y contraseña con el mismo correo queda unida a Google
+      db.prepare('UPDATE users SET google_sub = ?, foto = COALESCE(?, foto) WHERE id = ?').run(datos.sub, datos.picture || null, user.id);
+    } else {
+      const id = crypto.randomUUID();
+      q.insertUser.run(id, String(datos.name || mail.split('@')[0]).slice(0, 80), mail, hashPassword(randomToken()),
+        defaultQuota, COLORS[crypto.randomInt(COLORS.length)], Date.now());
+      db.prepare('UPDATE users SET google_sub = ?, foto = ? WHERE id = ?').run(datos.sub, datos.picture || null, id);
+      user = { id };
+    }
+    user = q.userById.get(user.id);
+    const token = startSession(res, user, (req.body && req.body.client) || 'web');
+    res.json({ user: meResponse(user), token });
+  }));
+
+  // ----- Vincular un dispositivo con un código (como el ordenador en Memories) -----
+  // El dispositivo nuevo pide un código, lo enseña y espera; desde otro donde ya
+  // has entrado (por ejemplo el móvil con Google) escribes el código y queda dentro.
+  const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  app.post('/api/vincular', wrap((req, res) => {
+    db.prepare('DELETE FROM vinculos WHERE expires_at < ?').run(Date.now());
+    const letras = Array.from({ length: 8 }, () => ALFABETO[crypto.randomInt(ALFABETO.length)]).join('');
+    const codigo = `${letras.slice(0, 4)}-${letras.slice(4)}`;
+    const secreto = randomToken(24);
+    const cliente = String((req.body && req.body.client) || 'web').slice(0, 80);
+    db.prepare('INSERT INTO vinculos (secreto, codigo, cliente, expires_at) VALUES (?, ?, ?, ?)')
+      .run(secreto, codigo, cliente, Date.now() + 10 * 60 * 1000);
+    res.status(201).json({ codigo, secreto, caduca: 600 });
+  }));
+
+  app.get('/api/vincular/:secreto', wrap((req, res) => {
+    const v = db.prepare('SELECT * FROM vinculos WHERE secreto = ?').get(req.params.secreto);
+    if (!v || v.expires_at < Date.now()) throw new HttpError(410, 'El código ha caducado. Pide uno nuevo.');
+    if (!v.user_id) return res.json({ estado: 'esperando' });
+    db.prepare('DELETE FROM vinculos WHERE secreto = ?').run(v.secreto);
+    const user = q.userById.get(v.user_id);
+    const token = startSession(res, user, v.cliente);
+    res.json({ estado: 'listo', user: meResponse(user), token });
+  }));
+
+  app.post('/api/vincular/aprobar', auth, wrap((req, res) => {
+    const codigo = String((req.body && req.body.codigo) || '').toUpperCase().replace(/[^A-Z]/g, '');
+    const formateado = `${codigo.slice(0, 4)}-${codigo.slice(4)}`;
+    const v = db.prepare('SELECT * FROM vinculos WHERE codigo = ? AND user_id IS NULL AND expires_at > ?').get(formateado, Date.now());
+    if (codigo.length !== 8 || !v) throw new HttpError(404, 'Ese código no existe o ha caducado');
+    db.prepare('UPDATE vinculos SET user_id = ? WHERE secreto = ?').run(req.user.id, v.secreto);
+    res.json({ ok: true, dispositivo: v.cliente });
+  }));
 
   // ----- Eventos en tiempo real -----
   app.get('/api/events', auth, (req, res) => {

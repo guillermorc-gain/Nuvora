@@ -69,15 +69,59 @@ Variables de entorno opcionales:
 
 > Para usarlo fuera de tu red local, ponlo detrás de un proxy con HTTPS (Caddy, Nginx…).
 
+## Iniciar sesión con Google
+
+Nuvora usa el **mismo proyecto de Google que Memories** (`memories-99b01`), así que tu cuenta de Google sirve en las
+dos apps. Con la misma cuenta, el móvil, la web y el ordenador ven los mismos archivos y los cambios llegan al momento.
+
+Hay tres formas de entrar:
+
+- **Continuar con Google:** en la app de Android (inicio de sesión nativo) y en la web abierta en `http://localhost:3000`.
+- **Entrar con otro dispositivo:** el dispositivo nuevo enseña un código de 8 letras; en otro donde ya hayas entrado,
+  *foto de perfil → Vincular un dispositivo* y escribes el código (como al vincular el ordenador en Memories).
+  Sirve en cualquier navegador y en `nuvora-sync login`.
+- **Correo y contraseña**, como antes. Si después entras con Google con el mismo correo, es la misma cuenta.
+
+### Configurarlo (una vez)
+
+1. **Para la app de Android**, en <https://console.firebase.google.com> → proyecto *memories* → **Añadir app → Android**:
+   - Nombre del paquete: `com.guillermorc.nuvora`
+   - SHA-1: `24:B5:AC:C2:4C:91:BF:97:F4:C5:89:32:99:B0:FB:E3:2A:B1:ED:90`
+   - (SHA-256, por si lo pide: `E0:2E:F6:68:92:50:20:F3:9D:56:D3:54:7E:A1:73:63:E1:E5:50:45:72:12:62:F2:94:B6:57:6D:38:D4:F2:26`)
+
+   No hace falta descargar nada ni volver a compilar: basta con que Google conozca la app.
+2. **Para la web**, en <https://console.cloud.google.com/apis/credentials?project=memories-99b01> abre el cliente
+   *Web client (auto created by Google Service)* y en **Orígenes autorizados de JavaScript** añade `http://localhost:3000`
+   (y la dirección `https://…` fija de tu túnel, si tienes una). Google solo permite `localhost` o direcciones `https`.
+
+Para usar otro proyecto de Google: `NUVORA_GOOGLE_CLIENT_ID=<id del cliente web> npm start` (y cambia
+`CLIENTE_WEB_GOOGLE` en la app de Android).
+
+## Usarlo fuera de casa
+
+```bash
+npm run tunel
+```
+
+Arranca el servidor y lo publica en internet con un túnel HTTPS gratuito de Cloudflare, sin abrir puertos en el router
+(hay que instalar [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)).
+Muestra una dirección `https://….trycloudflare.com` para escribir en la app (*foto de perfil → Cambiar de servidor*).
+
+Esa dirección cambia cada vez. Para una **fija**, con una cuenta de Cloudflare y un dominio:
+`cloudflared tunnel login`, `cloudflared tunnel create nuvora`, `cloudflared tunnel route dns nuvora nuvora.tudominio.com`,
+apunta el túnel a `http://localhost:3000` y arranca con `NUVORA_TUNEL=nuvora npm run tunel`.
+
 ## App de Android
 
 `android/` es la app para el móvil (Kotlin, sin dependencias): abre tu servidor Nuvora con todo lo de la web
 y además permite elegir archivos del móvil para subirlos, guarda las descargas en «Descargas», pone el
 vídeo a pantalla completa y tiñe la barra de estado con el color del tema.
 
-1. Arranca el servidor en el ordenador: `npm start` muestra una línea «En el móvil: http://192.168.…:3000».
+1. Arranca el servidor en el ordenador: `npm start` muestra una línea «En el móvil: http://192.168.…:3000»
+   (o `npm run tunel` para una dirección que funciona también fuera de casa).
 2. Instala `Nuvora.apk` (hay que permitir instalar apps de origen desconocido) y escribe esa dirección.
-3. Para cambiar de servidor: foto de perfil → *Cambiar de servidor*.
+3. Entra con **Continuar con Google** (ver *Iniciar sesión con Google*).
+4. Para cambiar de servidor: foto de perfil → *Cambiar de servidor*.
 
 Cada versión se compila en GitHub Actions y va firmada con la misma clave (`android/app/nuvora.keystore`),
 así que cada APK se instala encima de la anterior.
@@ -85,7 +129,8 @@ así que cada APK se instala encima de la anterior.
 ## Sincronizar una carpeta del ordenador
 
 ```bash
-node sync/nuvora-sync.js login --server http://localhost:3000 --email tu@correo.com
+node sync/nuvora-sync.js login --server http://localhost:3000   # código que apruebas desde el móvil
+# o con correo y contraseña: … login --server http://localhost:3000 --email tu@correo.com
 node sync/nuvora-sync.js sync ~/Nuvora --watch     # se queda vigilando cambios
 node sync/nuvora-sync.js sync ~/Copia --watch --sentido subir --borrar no   # copia de seguridad
 node sync/nuvora-sync.js status ~/Nuvora

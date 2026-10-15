@@ -2,6 +2,7 @@
 /*
  * nuvora-sync — sincroniza en ambos sentidos una carpeta local con «Mi unidad».
  *
+ *   nuvora-sync login --server http://localhost:3000          (código que apruebas en el móvil)
  *   nuvora-sync login --server http://localhost:3000 --email tu@correo.com
  *   nuvora-sync sync ~/Nuvora [--watch] [--sentido ambos|subir|bajar] [--borrar si|no] [--intervalo 10]
  *   nuvora-sync status ~/Nuvora
@@ -281,22 +282,43 @@ async function syncOnce(client, rootDir, opciones = {}) {
 
 // ---------- Comandos ----------
 async function cmdLogin(args) {
-  const server = args.server || (await ask('Servidor (p. ej. http://localhost:3000): '));
-  const email = args.email || (await ask('Correo: '));
-  const password = args.password || (await ask('Contraseña: ', true));
-  const res = await fetch(`${server.replace(/\/$/, '')}/api/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, client: `nuvora-sync@${os.hostname()}` }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'No se pudo iniciar sesión');
+  const server = (args.server || (await ask('Servidor (p. ej. http://localhost:3000): '))).replace(/\/$/, '');
+  const cliente = `nuvora-sync@${os.hostname()}`;
+  let data;
+  if (args.email) {
+    // Con correo y contraseña
+    const password = args.password || (await ask('Contraseña: ', true));
+    const res = await fetch(`${server}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: args.email, password, client: cliente }),
+    });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo iniciar sesión');
+  } else {
+    // Con un código que se aprueba desde el móvil (sirve para cuentas de Google)
+    const res = await fetch(`${server}/api/vincular`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: cliente }),
+    });
+    const v = await res.json();
+    if (!res.ok) throw new Error(v.error || 'El servidor no responde');
+    console.log(`\n  Código: ${v.codigo}\n`);
+    console.log('  En el móvil (o en la web) con Nuvora abierto: foto de perfil → Vincular un dispositivo,');
+    console.log('  y escribe el código. Esperando…');
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const e = await fetch(`${server}/api/vincular/${v.secreto}`);
+      const r = await e.json();
+      if (!e.ok) throw new Error(r.error || 'El código ha caducado');
+      if (r.estado === 'listo') { data = r; break; }
+    }
+  }
   saveConfig({ server, token: data.token, email: data.user.email });
   console.log(`✓ Sesión iniciada como ${data.user.name} <${data.user.email}>`);
 }
 
 function requireClient() {
   const cfg = loadConfig();
-  if (!cfg) throw new Error('Primero inicia sesión: nuvora-sync login --server URL --email CORREO');
+  if (!cfg) throw new Error('Primero inicia sesión: nuvora-sync login --server URL');
   return new Client(cfg.server, cfg.token);
 }
 
@@ -363,7 +385,8 @@ async function main() {
   console.log(`nuvora-sync — sincroniza una carpeta con Nuvora
 
 Uso:
-  nuvora-sync login  --server URL --email CORREO   Inicia sesión
+  nuvora-sync login  --server URL                  Inicia sesión con un código que apruebas desde el móvil
+  nuvora-sync login  --server URL --email CORREO   Inicia sesión con correo y contraseña
   nuvora-sync sync   [CARPETA] [opciones]          Sincroniza (por defecto ~/Nuvora)
       --watch                      Sigue vigilando los cambios
       --sentido ambos|subir|bajar  En los dos sentidos (por defecto), solo subir o solo bajar

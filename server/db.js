@@ -75,7 +75,20 @@ function openDatabase(dataDir) {
       at          INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_changes_owner ON changes(owner_id, seq);
+
+    CREATE TABLE IF NOT EXISTS vinculos (
+      secreto     TEXT PRIMARY KEY,
+      codigo      TEXT NOT NULL UNIQUE,
+      cliente     TEXT NOT NULL,
+      user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+      expires_at  INTEGER NOT NULL
+    );
   `);
+  // Columnas añadidas después (bases de datos de versiones anteriores)
+  const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+  if (!cols.has('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT');
+  if (!cols.has('foto')) db.exec('ALTER TABLE users ADD COLUMN foto TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub)');
   return db;
 }
 

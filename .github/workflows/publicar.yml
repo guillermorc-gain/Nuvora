@@ -8,6 +8,7 @@ on:
       - 'server/**'
       - 'public/**'
       - 'sync/**'
+      - 'scripts/**'
       - 'test/**'
       - 'package.json'
       - 'package-lock.json'
@@ -63,7 +64,7 @@ jobs:
           V="${{ steps.version.outputs.tag }}"
           npm version --no-git-tag-version --allow-same-version "${V#v}.0"
           rm -rf dist && mkdir -p dist/Nuvora
-          cp -r server public sync package.json package-lock.json README.md dist/Nuvora/
+          cp -r server public sync scripts package.json package-lock.json README.md dist/Nuvora/
           cp -r node_modules dist/Nuvora/
           cd dist && zip -qr Nuvora.zip Nuvora && ls -la Nuvora.zip
 

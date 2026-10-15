@@ -65,6 +65,104 @@ let authMode = 'login';
 function showAuth() {
   $('#app').classList.add('hidden');
   $('#auth').classList.remove('hidden');
+  prepararGoogle();
+}
+
+function authError(msg) {
+  const box = $('#auth-error');
+  box.textContent = msg;
+  box.classList.toggle('hidden', !msg);
+}
+
+function entrar(user) {
+  state.me = user;
+  startApp();
+}
+
+// ---------- Iniciar sesión con Google ----------
+const G_LOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>';
+
+async function loginGoogle(credential) {
+  authError('');
+  try {
+    const data = await api('POST', '/api/auth/google', { credential });
+    entrar(data.user);
+  } catch (err) {
+    authError(err.message);
+  }
+}
+// La app de Android entrega aquí el token del inicio de sesión nativo de Google
+window.nuvoraGoogleToken = loginGoogle;
+window.nuvoraGoogleError = (msg) => { if (msg) authError(msg); };
+
+let googleListo = false;
+async function prepararGoogle() {
+  if (googleListo) return;
+  googleListo = true;
+  const slot = $('#google-slot');
+  const enApp = window.NuvoraApp && typeof window.NuvoraApp.iniciarConGoogle === 'function';
+  if (enApp) {
+    // Dentro de la APK: el inicio de sesión de Google de Android (la web de Google no deja hacerlo en una WebView)
+    slot.innerHTML = `<button type="button" class="btn wide google">${G_LOGO} Continuar con Google</button>`;
+    slot.firstChild.onclick = () => { authError(''); window.NuvoraApp.iniciarConGoogle(); };
+    return;
+  }
+  let cfg;
+  try { cfg = await api('GET', '/api/config'); } catch { return; }
+  if (!cfg.googleClientId) return;
+  const script = document.createElement('script');
+  script.src = 'https://accounts.google.com/gsi/client';
+  script.async = true;
+  script.onload = () => {
+    try {
+      google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: (r) => loginGoogle(r.credential), ux_mode: 'popup' });
+      google.accounts.id.renderButton(slot, {
+        theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: 'es',
+        width: Math.min(400, $('#vincular-btn').offsetWidth || 300),
+      });
+    } catch { /* Google no disponible: quedan las otras formas de entrar */ }
+  };
+  document.head.appendChild(script);
+}
+
+// ---------- Entrar con otro dispositivo (código de vinculación) ----------
+$('#vincular-btn').addEventListener('click', async () => {
+  let data;
+  try { data = await api('POST', '/api/vincular', { client: 'web' }); } catch (err) { authError(err.message); return; }
+  let activo = true;
+  const m = openModal({
+    title: 'Entrar con otro dispositivo',
+    body: `<p>En el móvil o en otro ordenador donde ya hayas entrado en Nuvora, toca tu <b>foto de perfil → Vincular un dispositivo</b> y escribe este código:</p>
+      <div class="codigo">${esc(data.codigo)}</div>
+      <p class="esperando"><i></i> Esperando… El código caduca en 10 minutos.</p>`,
+    actions: [{ label: 'Cancelar' }],
+    onClose: () => { activo = false; },
+  });
+  const comprobar = async () => {
+    if (!activo) return;
+    try {
+      const r = await api('GET', `/api/vincular/${data.secreto}`);
+      if (r.estado === 'listo') { activo = false; m.close(); entrar(r.user); return; }
+    } catch (err) {
+      activo = false; m.close(); authError(err.message); return;
+    }
+    setTimeout(comprobar, 2000);
+  };
+  setTimeout(comprobar, 2000);
+});
+
+function vincularDialog() {
+  const m = openModal({
+    title: 'Vincular un dispositivo',
+    body: `<p>Escribe el código que aparece en el otro dispositivo (en «Entrar con otro dispositivo» o en <code>nuvora-sync login</code>).</p>
+      <input id="codigo-vincular" class="codigo-input" maxlength="9" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters">`,
+    actions: [{ label: 'Cancelar' }, { label: 'Vincular', primary: true, onClick: async (w) => {
+      const r = await attempt(() => api('POST', '/api/vincular/aprobar', { codigo: $('#codigo-vincular', w).value }));
+      if (!r) return false;
+      toast(r.dispositivo === 'web' ? 'Listo: el otro dispositivo ya ha entrado con tu cuenta' : `Listo: ${r.dispositivo} ya tiene tu cuenta`);
+    } }],
+  });
+  m.el.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('.modal footer .primary', m.el).click(); });
 }
 $$('.tab').forEach((t) => t.addEventListener('click', () => {
   authMode = t.dataset.mode;
@@ -81,13 +179,10 @@ $('#auth-form').addEventListener('submit', async (e) => {
   btn.disabled = true;
   try {
     const data = await api('POST', `/api/auth/${authMode}`, Object.fromEntries(f));
-    state.me = data.user;
     e.target.reset();
-    startApp();
+    entrar(data.user);
   } catch (err) {
-    const box = $('#auth-error');
-    box.textContent = err.message;
-    box.classList.remove('hidden');
+    authError(err.message);
   } finally {
     btn.disabled = false;
   }
@@ -120,7 +215,9 @@ function renderAccount() {
   const me = state.me;
   const av = $('#avatar-btn');
   av.textContent = (me.name || me.email)[0].toUpperCase();
-  av.style.background = me.color;
+  av.style.backgroundColor = me.color;
+  av.style.backgroundImage = me.foto ? `url("${me.foto.replace(/"/g, '%22')}")` : '';
+  av.classList.toggle('foto', !!me.foto);
   const pct = Math.min(100, (me.used / me.quota) * 100);
   $('#storage-fill').style.width = `${Math.max(pct, me.used ? 1 : 0)}%`;
   $('#storage-text').textContent = `${formatSize(me.used)} de ${formatSize(me.quota)} usados`;
@@ -471,6 +568,7 @@ $('#avatar-btn').addEventListener('click', (e) => {
     { html: `<div class="menu-head"><b>${esc(me.name)}</b><span class="muted small">${esc(me.email)}</span><br>
       <span class="muted small">${formatSize(me.used)} de ${formatSize(me.quota)}</span></div>` },
     '-',
+    { icon: 'devices', label: 'Vincular un dispositivo', action: vincularDialog },
     { icon: 'palette', label: 'Apariencia', action: aparienciaDialog },
     { icon: 'keyboard', label: 'Atajos de teclado', action: atajosDialog },
     { icon: 'sync', label: 'Sincronizar mi ordenador', action: () => go('sync') },
@@ -481,6 +579,9 @@ $('#avatar-btn').addEventListener('click', (e) => {
 
 async function logout() {
   await attempt(() => api('POST', '/api/auth/logout'));
+  // Para que la próxima vez Google vuelva a preguntar qué cuenta usar
+  if (window.NuvoraApp && typeof window.NuvoraApp.cerrarSesionGoogle === 'function') window.NuvoraApp.cerrarSesionGoogle();
+  if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
   location.hash = '';
   location.reload();
 }
@@ -1064,8 +1165,8 @@ function renderSync() {
 
     <ol class="steps">
       <li><b>Instala Node.js 22 o superior</b> y descarga el cliente desde el repositorio de Nuvora (carpeta <code>sync/</code>).</li>
-      <li><b>Inicia sesión desde la terminal</b>
-        <pre class="cmd">node sync/nuvora-sync.js login --server ${esc(origin)} --email ${esc(state.me.email)}</pre></li>
+      <li><b>Inicia sesión desde la terminal</b> <span class="muted small">(te dará un código: apruébalo en tu foto de perfil → Vincular un dispositivo)</span>
+        <pre class="cmd">node sync/nuvora-sync.js login --server ${esc(origin)}</pre></li>
       <li><b>Empieza a sincronizar</b> <span class="muted small">(sigue vigilando la carpeta hasta que cierres la terminal)</span>
         <pre class="cmd" id="sync-cmd">${esc(cmd())}</pre>
         <button class="btn" id="copy-cmd" style="margin-top:8px">${icon('copy')} Copiar la orden</button></li>

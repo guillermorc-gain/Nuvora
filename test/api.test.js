@@ -263,3 +263,81 @@ test('sincronización solo subir y sin llevar los borrados', async () => {
   assert.equal(fs.readFileSync(path.join(otro, 'foto.jpg'), 'utf8'), 'cambiada en la nube');
   assert.ok(fs.existsSync(path.join(otro, 'local.txt')));
 });
+
+test('iniciar sesión con Google y vincular otro dispositivo con un código', async () => {
+  const crypto = require('node:crypto');
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'clave-prueba', alg: 'RS256', use: 'sig' };
+  const firmar = (payload, kid = 'clave-prueba') => {
+    const h = Buffer.from(JSON.stringify({ alg: 'RS256', kid })).toString('base64url');
+    const p = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const sig = crypto.sign('RSA-SHA256', Buffer.from(`${h}.${p}`), privateKey).toString('base64url');
+    return `${h}.${p}.${sig}`;
+  };
+  const app = createApp({
+    dataDir: path.join(tmp, 'data-google'),
+    google: { clientIds: ['cliente-prueba'], fetchKeys: async () => ({ keys: [jwk] }) },
+  });
+  let srv;
+  await new Promise((r) => { srv = app.listen(0, '127.0.0.1', r); });
+  const url = `http://127.0.0.1:${srv.address().port}`;
+  const post = (ruta, body, token) => fetch(url + ruta, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  try {
+    const ahora = Math.floor(Date.now() / 1000);
+    const base = { iss: 'https://accounts.google.com', aud: 'cliente-prueba', sub: 'g-123', email: 'Eva@Gmail.com',
+      email_verified: true, name: 'Eva', picture: 'https://foto/eva.jpg', exp: ahora + 600, iat: ahora };
+
+    assert.equal((await (await fetch(`${url}/api/config`)).json()).googleClientId, 'cliente-prueba');
+
+    // Token válido: crea la cuenta con su nombre y foto
+    let r = await post('/api/auth/google', { credential: firmar(base), client: 'android' });
+    assert.equal(r.status, 200);
+    const eva = await r.json();
+    assert.equal(eva.user.email, 'eva@gmail.com');
+    assert.equal(eva.user.foto, 'https://foto/eva.jpg');
+    assert.equal(eva.user.google, true);
+
+    // La segunda vez entra en la misma cuenta
+    r = await post('/api/auth/google', { credential: firmar(base) });
+    assert.equal((await r.json()).user.id, eva.user.id);
+    assert.match(r.headers.get('set-cookie'), /nuvora_session=/);
+
+    // Tokens que no valen
+    for (const malo of [
+      firmar({ ...base, aud: 'otra-app' }),
+      firmar({ ...base, exp: ahora - 3600 }),
+      firmar({ ...base, iss: 'https://evil.example' }),
+      firmar({ ...base, email_verified: false }),
+      firmar(base, 'clave-desconocida'),
+      firmar(base).slice(0, -4) + 'AAAA',
+    ]) {
+      assert.equal((await post('/api/auth/google', { credential: malo })).status, 401);
+    }
+
+    // Una cuenta de correo y contraseña con el mismo correo se une a Google
+    await post('/api/auth/register', { name: 'Fede', email: 'fede@gmail.com', password: 'contraseña-larga', client: 't' });
+    const fede = await (await post('/api/auth/google', { credential: firmar({ ...base, sub: 'g-456', email: 'fede@gmail.com', name: 'Fede G' }) })).json();
+    assert.equal(fede.user.name, 'Fede');
+    assert.equal(fede.user.google, true);
+
+    // Vincular: el ordenador pide un código, el móvil (con Google) lo aprueba
+    const { codigo, secreto } = await (await post('/api/vincular', { client: 'nuvora-sync@pc' })).json();
+    assert.match(codigo, /^[A-Z]{4}-[A-Z]{4}$/);
+    assert.equal((await (await fetch(`${url}/api/vincular/${secreto}`)).json()).estado, 'esperando');
+    assert.equal((await post('/api/vincular/aprobar', { codigo: 'ZZZZ-ZZZZ' }, eva.token)).status, 404);
+    assert.equal((await post('/api/vincular/aprobar', { codigo: codigo.toLowerCase().replace('-', ' ') }, eva.token)).status, 200);
+    const listo = await (await fetch(`${url}/api/vincular/${secreto}`)).json();
+    assert.equal(listo.estado, 'listo');
+    assert.equal(listo.user.id, eva.user.id);
+    const yo = await (await fetch(`${url}/api/me`, { headers: { Authorization: `Bearer ${listo.token}` } })).json();
+    assert.equal(yo.email, 'eva@gmail.com');
+    // El código solo sirve una vez
+    assert.equal((await fetch(`${url}/api/vincular/${secreto}`)).status, 410);
+  } finally {
+    srv.closeAllConnections();
+    srv.close();
+  }
+});

@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Environment
 import android.view.View
 import android.view.ViewGroup
@@ -25,7 +26,20 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CredentialManagerCallback
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.ClearCredentialException
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import org.json.JSONObject
+import java.util.concurrent.Executor
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
@@ -112,6 +126,24 @@ class MainActivity : Activity() {
             }
         }
 
+        /** Abre la hoja de cuentas de Google de Android y entrega el token a la página. */
+        @JavascriptInterface
+        fun iniciarConGoogle() {
+            runOnUiThread { entrarConGoogle() }
+        }
+
+        @JavascriptInterface
+        fun cerrarSesionGoogle() {
+            runOnUiThread {
+                CredentialManager.create(this@MainActivity).clearCredentialStateAsync(
+                    ClearCredentialStateRequest(), null, enPrincipal,
+                    object : CredentialManagerCallback<Void?, ClearCredentialException> {
+                        override fun onResult(result: Void?) {}
+                        override fun onError(e: ClearCredentialException) {}
+                    })
+            }
+        }
+
         @JavascriptInterface
         fun cambiarServidor() {
             runOnUiThread {
@@ -143,6 +175,43 @@ class MainActivity : Activity() {
             }
         }
     }
+
+    private val enPrincipal = Executor { runOnUiThread(it) }
+
+    private fun js(codigo: String) = web.evaluateJavascript(codigo, null)
+
+    /**
+     * «Iniciar sesión con Google» nativo (Credential Manager), con el cliente web del
+     * proyecto de Memories: el servidor Nuvora comprueba el token y abre la sesión.
+     */
+    private fun entrarConGoogle() {
+        val opcion = GetSignInWithGoogleOption.Builder(CLIENTE_WEB_GOOGLE).build()
+        val peticion = GetCredentialRequest.Builder().addCredentialOption(opcion).build()
+        CredentialManager.create(this).getCredentialAsync(this, peticion, CancellationSignal(), enPrincipal,
+            object : CredentialManagerCallback<GetCredentialResponse, GetCredentialException> {
+                override fun onResult(result: GetCredentialResponse) {
+                    val c = result.credential
+                    if (c is CustomCredential && c.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                        val token = GoogleIdTokenCredential.createFrom(c.data).idToken
+                        js("window.nuvoraGoogleToken && nuvoraGoogleToken(${JSONObject.quote(token)})")
+                    } else errorGoogle("Google devolvió una credencial inesperada.")
+                }
+
+                override fun onError(e: GetCredentialException) {
+                    when (e) {
+                        is GetCredentialCancellationException -> {}
+                        is NoCredentialException -> errorGoogle(
+                            "Google no ha dejado entrar. Comprueba que hay una cuenta de Google en el móvil " +
+                                "y que la app Nuvora está registrada en Firebase (README → Iniciar sesión con Google)."
+                        )
+                        else -> errorGoogle("No se pudo entrar con Google: ${e.message ?: e.type}")
+                    }
+                }
+            })
+    }
+
+    private fun errorGoogle(mensaje: String) =
+        js("window.nuvoraGoogleError && nuvoraGoogleError(${JSONObject.quote(mensaje)})")
 
     /** null si en [url] responde un servidor Nuvora; si no, el motivo para enseñarlo. */
     private fun comprobar(url: String): String? = try {
@@ -267,5 +336,8 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ELEGIR_ARCHIVOS = 7
+
+        /** Cliente web de Google del proyecto Firebase de Memories (memories-99b01). */
+        private const val CLIENTE_WEB_GOOGLE = "920678667813-ucrbu5sc7lh2gtef4rbor7sa63tampbo.apps.googleusercontent.com"
     }
 }
