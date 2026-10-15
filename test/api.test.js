@@ -225,3 +225,41 @@ test('cliente de sincronización bidireccional', async () => {
   await syncOnce(client, dirA);
   assert.equal(fs.readFileSync(path.join(dirA, 'docs/web.txt'), 'utf8'), 'subido desde la web');
 });
+
+test('sincronización solo subir y sin llevar los borrados', async () => {
+  const dani = await register('dani');
+  const client = new Client(base, dani);
+  const pc = fs.mkdtempSync(path.join(tmp, 'pc-copia-'));
+  fs.writeFileSync(path.join(pc, 'foto.jpg'), 'original');
+  let s = await syncOnce(client, pc, { sentido: 'subir' });
+  assert.equal(s.up, 1);
+
+  // Algo subido desde la web no baja al ordenador
+  await upload(dani, [['solo-nube.txt', 'web']]);
+  s = await syncOnce(client, pc, { sentido: 'subir' });
+  assert.equal(s.down, 0);
+  assert.ok(!fs.existsSync(path.join(pc, 'solo-nube.txt')));
+
+  // Un cambio en la nube tampoco pisa el archivo local
+  const foto = (await call(dani, 'GET', '/api/nodes?parent=root')).body.items.find((i) => i.name === 'foto.jpg');
+  await fetch(`${base}/api/sync/file?path=foto.jpg`, { method: 'PUT', headers: { Authorization: `Bearer ${dani}` }, body: 'cambiada en la nube' });
+  await syncOnce(client, pc, { sentido: 'subir' });
+  assert.equal(fs.readFileSync(path.join(pc, 'foto.jpg'), 'utf8'), 'original');
+
+  // Borrar en local sin llevar los borrados: sigue en Nuvora
+  fs.rmSync(path.join(pc, 'foto.jpg'));
+  s = await syncOnce(client, pc, { sentido: 'subir', borrar: false });
+  assert.equal(s.delRemote, 0);
+  assert.ok((await call(dani, 'GET', '/api/nodes?parent=root')).body.items.some((i) => i.id === foto.id));
+  s = await syncOnce(client, pc, { sentido: 'subir', borrar: false });
+  assert.equal(s.up + s.down + s.delRemote, 0);
+
+  // Solo bajar: trae lo de la nube y lo nuevo en local no sube
+  const otro = fs.mkdtempSync(path.join(tmp, 'pc-bajar-'));
+  fs.writeFileSync(path.join(otro, 'local.txt'), 'no sube');
+  s = await syncOnce(client, otro, { sentido: 'bajar' });
+  assert.equal(s.up, 0);
+  assert.equal(s.down, 2);
+  assert.equal(fs.readFileSync(path.join(otro, 'foto.jpg'), 'utf8'), 'cambiada en la nube');
+  assert.ok(fs.existsSync(path.join(otro, 'local.txt')));
+});

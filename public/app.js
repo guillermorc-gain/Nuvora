@@ -18,6 +18,13 @@ const state = {
 };
 try { state.layout = localStorage.getItem('nuvora-layout') || 'grid'; } catch { /* sin almacenamiento */ }
 
+const VIEW_SUBTITLES = {
+  drive: 'Tus archivos y carpetas', shared: 'Lo que otras personas comparten contigo',
+  'shared-by-me': 'Personas invitadas y enlaces públicos', recent: 'Lo último que subiste o cambiaste',
+  starred: 'Lo que quieres tener a mano', trash: 'Se puede restaurar hasta que la vacíes',
+  sync: 'Una carpeta de tu ordenador, siempre al día',
+};
+
 const VIEW_TITLES = {
   drive: 'Mi unidad', shared: 'Compartido conmigo', 'shared-by-me': 'Compartido por mí',
   recent: 'Recientes', starred: 'Destacados', trash: 'Papelera', search: 'Resultados de búsqueda', sync: 'Sincronización',
@@ -132,21 +139,33 @@ function connectEvents() {
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'shared') toast(`${msg.by} compartió «${msg.name}» contigo`);
+    pulseRing();
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => { if (state.view !== 'sync') load(true); refreshMe(); }, 250);
   };
 }
 
+// El anillo que gira alrededor de la foto de perfil mientras se envían o reciben datos
+let ringTimer = null;
+function updateRing() {
+  $('#ring').classList.toggle('on', activeUploads > 0 || ringTimer !== null);
+}
+function pulseRing() {
+  clearTimeout(ringTimer);
+  ringTimer = setTimeout(() => { ringTimer = null; updateRing(); }, 1600);
+  updateRing();
+}
+
 // ---------- Rutas ----------
 function route() {
-  const hash = location.hash.replace(/^#\/?/, '') || 'drive';
+  const hash = location.hash.replace(/^#\/?/, '') || (VIEW_TITLES[apariencia.inicio] ? apariencia.inicio : 'drive');
   const [view, arg] = hash.split('/');
   state.view = VIEW_TITLES[view] ? view : 'drive';
   state.folderId = state.view === 'drive' && arg ? arg : null;
   if (state.view === 'search') state.query = decodeURIComponent(arg || '');
   else $('#search').value = '';
   state.selected.clear();
-  $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === state.view));
+  $$('.nav a, .tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.view === state.view));
   $('#sidebar').classList.remove('open');
   load();
 }
@@ -208,7 +227,9 @@ function renderCrumbs() {
   } else {
     el.innerHTML = `<span data-drop="${state.view === 'drive' ? 'root' : ''}">${VIEW_TITLES[state.view]}</span>`;
   }
+  $('#subtitle').textContent = state.view === 'drive' && state.folder ? '' : VIEW_SUBTITLES[state.view] || '';
   $$('[data-layout]').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
+  $('.seg').classList.toggle('hidden', state.view === 'sync');
 }
 
 // ---------- Renderizado ----------
@@ -222,12 +243,7 @@ const EMPTY = {
   search: ['Sin resultados', 'Prueba con otras palabras.'],
 };
 
-const EMPTY_ART = `<svg class="art" viewBox="0 0 180 140" aria-hidden="true">
-  <defs><linearGradient id="eg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs>
-  <ellipse cx="90" cy="124" rx="62" ry="8" fill="currentColor" opacity=".08"/>
-  <path d="M52 100h76a22 22 0 0 0 2-43.9A30 30 0 0 0 73 61a19 19 0 0 0-21 39z" fill="url(#eg)" opacity=".9"/>
-  <path d="M90 92V68m0 0-10 10m10-10 10 10" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
+const EMPTY_ART = '<img class="art" src="/art.svg" alt="">';
 
 function itemLabel(it) {
   if (state.view === 'trash') return `En la papelera · ${formatDate(it.trashedAt)}`;
@@ -362,6 +378,7 @@ function openItem(it) {
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select') || $('.modal-wrap') || $('.viewer')) return;
   const sel = selectedItems();
+  if (e.key === '?') { atajosDialog(); return; }
   if (e.key === 'Escape') { state.selected.clear(); paintSelection(); hideMenu(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); state.selected = new Set(state.items.map((i) => i.id)); paintSelection(); }
   else if (!sel.length) return;
@@ -454,8 +471,9 @@ $('#avatar-btn').addEventListener('click', (e) => {
     { html: `<div class="menu-head"><b>${esc(me.name)}</b><span class="muted small">${esc(me.email)}</span><br>
       <span class="muted small">${formatSize(me.used)} de ${formatSize(me.quota)}</span></div>` },
     '-',
-    { icon: 'sync', label: 'Sincronizar mi equipo', action: () => go('sync') },
-    { icon: 'moon', label: 'Cambiar tema', action: toggleTheme },
+    { icon: 'palette', label: 'Apariencia', action: aparienciaDialog },
+    { icon: 'keyboard', label: 'Atajos de teclado', action: atajosDialog },
+    { icon: 'sync', label: 'Sincronizar mi ordenador', action: () => go('sync') },
     { icon: 'logout', label: 'Cerrar sesión', action: logout },
   ]);
 });
@@ -467,6 +485,12 @@ async function logout() {
 }
 
 $('#theme-btn').addEventListener('click', toggleTheme);
+$('#settings-btn').addEventListener('click', aparienciaDialog);
+$('#fab').addEventListener('click', (e) => {
+  if (!canEditHere()) { go('drive'); setTimeout(() => showNewMenu(e.clientX, e.clientY), 120); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  showNewMenu(r.right - 230, r.top - 8 - 170);
+});
 $('#menu-btn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 $$('[data-layout]').forEach((b) => b.addEventListener('click', () => {
   state.layout = b.dataset.layout;
@@ -803,8 +827,10 @@ function pumpUploads() {
   while (activeUploads < 3 && uploadQueue.length) {
     const job = uploadQueue.shift();
     activeUploads++;
+    updateRing();
     uploadOne(job).finally(() => {
       activeUploads--;
+      updateRing();
       updateUploadTitle();
       pumpUploads();
       if (!activeUploads && !uploadQueue.length) { load(true); refreshMe(); }
@@ -926,27 +952,146 @@ document.addEventListener('drop', async (e) => {
   enqueueUploads(await collectEntries(e.dataTransfer), parentId);
 });
 
-// ---------- Página de sincronización ----------
+// ---------- Apariencia (como Opciones → Apariencia de Memories) ----------
+function aparienciaDialog() {
+  const body = document.createElement('div');
+  const chips = (key, opciones) => `<div class="chips">${opciones.map(([v, t]) =>
+    `<button class="chip-opt" data-k="${key}" data-v="${v}" aria-pressed="${String(apariencia[key]) === String(v)}">${t}</button>`).join('')}</div>`;
+  const draw = () => {
+    body.innerHTML = `
+      <div class="ap-title">Tema</div>
+      <div class="themes">${Object.entries(TEMAS).map(([id, t]) => `
+        <button class="theme" data-k="tema" data-v="${id}" aria-pressed="${apariencia.tema === id}">
+          <div class="head" style="background:linear-gradient(110deg, ${t.cabecera.join(', ')})"></div>
+          <div class="foot">${esc(t.nombre)}<span class="dots">${t.muestra.map((c) => `<i style="background:${c}"></i>`).join('')}</span></div>
+        </button>`).join('')}</div>
+      <div class="ap-title">Modo</div>
+      ${chips('modo', [['sistema', 'Como el sistema'], ['claro', 'Claro'], ['oscuro', 'Oscuro']])}
+      <div class="ap-title">Letra</div>
+      <div class="fonts">${Object.entries(LETRAS).map(([id, l]) => `
+        <button class="font-opt" data-k="fuente" data-v="${id}" aria-pressed="${apariencia.fuente === id}">
+          <b style="font-family:${esc(l.css)}">${esc(l.nombre)}</b><span>Mis fotos del viaje.jpg</span></button>`).join('')}</div>
+      <div class="ap-title">Formas</div>
+      ${chips('estilo', Object.entries(FORMAS).map(([id, f]) => [id, f.nombre]))}
+      <div class="ap-title">Tamaño del texto</div>
+      ${chips('texto', [['pequeno', 'Pequeño'], ['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']])}
+      <div class="ap-title">Cabecera</div>
+      ${chips('cabecera', [['degradado', 'Con degradado'], ['liso', 'Lisa']])}
+      <div class="ap-title">Pestañas en el móvil</div>
+      ${chips('pestanas', [['todo', 'Con su nombre'], ['iconos', 'Solo el icono']])}
+      <div class="ap-title">Abrir Nuvora en</div>
+      ${chips('inicio', [['drive', 'Mi unidad'], ['recent', 'Recientes'], ['starred', 'Destacados'], ['shared', 'Compartido conmigo']])}
+      <label class="switch"><span><b>Animaciones</b><br><span class="muted small">El brillo del logotipo, los menús y las transiciones</span></span>
+        <input type="checkbox" id="ap-anim" ${apariencia.animaciones ? 'checked' : ''}></label>`;
+  };
+  body.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-k]');
+    if (!b) return;
+    guardarApariencia({ [b.dataset.k]: b.dataset.v });
+    draw();
+  });
+  body.addEventListener('change', (e) => {
+    if (e.target.id === 'ap-anim') guardarApariencia({ animaciones: e.target.checked });
+  });
+  draw();
+  openModal({
+    title: 'Apariencia', body, wide: true,
+    actions: [
+      { label: 'Restablecer', onClick: () => { guardarApariencia({ ...APARIENCIA_POR_DEFECTO }); draw(); return false; } },
+      { label: 'Listo', primary: true },
+    ],
+  });
+}
+
+function atajosDialog() {
+  const filas = [
+    ['Doble clic · Enter', 'Abrir carpeta o vista previa'],
+    ['Ctrl/⌘ + clic · Mayús + clic', 'Seleccionar varios'],
+    ['Ctrl/⌘ + A', 'Seleccionar todo'],
+    ['Supr', 'Mover a la papelera'],
+    ['F2', 'Cambiar nombre'],
+    ['Clic derecho', 'Menú del elemento'],
+    ['← →', 'Archivo anterior o siguiente en la vista previa'],
+    ['Esc', 'Cerrar o quitar la selección'],
+    ['Arrastrar', 'Subir desde el ordenador o mover a una carpeta'],
+    ['?', 'Esta ayuda'],
+  ];
+  openModal({
+    title: 'Atajos de teclado',
+    body: `<div class="shortcuts">${filas.map(([k, d]) => `<span>${k.split(' · ').map((x) => `<kbd>${esc(x)}</kbd>`).join(' ')}</span><span>${esc(d)}</span>`).join('')}</div>`,
+    actions: [{ label: 'Listo', primary: true }],
+  });
+}
+
+// ---------- Página de sincronización (como Ajustes → Sentido de Memories para ordenador) ----------
+const SENTIDOS = [
+  ['ambos', 'En los dos sentidos', 'Lo que añadas en la carpeta sube a Nuvora y lo de Nuvora baja a la carpeta.'],
+  ['subir', 'Del ordenador a Nuvora', 'Copia de seguridad: lo de la carpeta sube, pero no se descarga nada.'],
+  ['bajar', 'De Nuvora al ordenador', 'Solo se descarga: lo que cambies en la carpeta no sube.'],
+];
+const syncOpts = { sentido: 'ambos', borrar: true, intervalo: '10', carpeta: '~/Nuvora' };
+try { Object.assign(syncOpts, JSON.parse(localStorage.getItem('nuvora-sync') || '{}')); } catch { /* sin almacenamiento */ }
+
 function renderSync() {
   const origin = location.origin;
+  const carpeta = () => { const c = syncOpts.carpeta || '~/Nuvora'; return /\s/.test(c) ? `"${c}"` : c; };
+  const cmd = () => ['node sync/nuvora-sync.js sync', carpeta(), '--watch',
+    syncOpts.sentido !== 'ambos' ? `--sentido ${syncOpts.sentido}` : '',
+    !syncOpts.borrar ? '--borrar no' : '',
+    syncOpts.intervalo !== '10' ? `--intervalo ${syncOpts.intervalo}` : ''].filter(Boolean).join(' ');
   $('#content').innerHTML = `<div class="sync-page">
-    <h2>Sincroniza una carpeta de tu equipo</h2>
-    <p class="muted">Con el cliente <b>nuvora-sync</b> cualquier carpeta de tu ordenador se mantiene idéntica a «Mi unidad»:
-      lo que añadas, cambies o borres en un lado aparece en el otro automáticamente.</p>
+    <h2>Sincroniza una carpeta de tu ordenador</h2>
+    <p class="muted">Con el cliente <b>nuvora-sync</b> una carpeta de tu ordenador se mantiene al día con «Mi unidad».
+      Elige cómo quieres que funcione y copia la orden.</p>
+
+    <div class="subhead">Sentido</div>
+    <div class="opt-group">${SENTIDOS.map(([v, t, d]) => `<label class="opt"><input type="radio" name="sentido" value="${v}" ${syncOpts.sentido === v ? 'checked' : ''}>
+      <span><b>${t}</b><span>${d}</span></span></label>`).join('')}</div>
+
+    <div class="subhead">Borrados</div>
+    <label class="switch"><span><b>Llevar los borrados al otro lado</b><br><span class="muted small">
+      Lo que borres en el ordenador va a la papelera de Nuvora, y lo que borres en Nuvora se quita de la carpeta.</span></span>
+      <input type="checkbox" id="sync-borrar" ${syncOpts.borrar ? 'checked' : ''}></label>
+    <p class="note">Si lo desactivas, lo que borres en un sitio no se borra en el otro.</p>
+
+    <div class="grid2" style="margin-top:14px">
+      <label class="field"><span>Carpeta del ordenador</span><input id="sync-carpeta" value="${esc(syncOpts.carpeta)}"></label>
+      <label class="field"><span>Comprobar cambios en Nuvora cada</span>
+        <select id="sync-intervalo">${[['5', '5 segundos'], ['10', '10 segundos'], ['30', '30 segundos'], ['60', '1 minuto']].map(([v, t]) =>
+          `<option value="${v}" ${syncOpts.intervalo === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    </div>
+
     <ol class="steps">
       <li><b>Instala Node.js 22 o superior</b> y descarga el cliente desde el repositorio de Nuvora (carpeta <code>sync/</code>).</li>
       <li><b>Inicia sesión desde la terminal</b>
         <pre class="cmd">node sync/nuvora-sync.js login --server ${esc(origin)} --email ${esc(state.me.email)}</pre></li>
-      <li><b>Sincroniza una carpeta</b> (con <code>--watch</code> sigue sincronizando en segundo plano)
-        <pre class="cmd">node sync/nuvora-sync.js sync ~/Nuvora --watch</pre></li>
+      <li><b>Empieza a sincronizar</b> <span class="muted small">(sigue vigilando la carpeta hasta que cierres la terminal)</span>
+        <pre class="cmd" id="sync-cmd">${esc(cmd())}</pre>
+        <button class="btn" id="copy-cmd" style="margin-top:8px">${icon('copy')} Copiar la orden</button></li>
     </ol>
     <div class="feature-grid">
-      <div class="feature">${icon('sync')}<b>Bidireccional</b><span class="muted small">Sube cambios locales y descarga los de la nube.</span></div>
-      <div class="feature">${icon('copy')}<b>Sin duplicados</b><span class="muted small">Detecta cambios por huella SHA-256: sólo transfiere lo necesario.</span></div>
-      <div class="feature">${icon('info')}<b>Conflictos seguros</b><span class="muted small">Si un archivo cambia en ambos lados, se conservan las dos versiones.</span></div>
-      <div class="feature">${icon('restore')}<b>Papelera</b><span class="muted small">Lo que borras en local va a la papelera de Nuvora y se puede recuperar.</span></div>
+      <div class="feature">${icon('sync')}<b>Al momento</b><span class="muted small">Los cambios de la carpeta se envían en cuanto guardas un archivo.</span></div>
+      <div class="feature">${icon('copy')}<b>Sin duplicados</b><span class="muted small">Detecta los cambios por la huella SHA-256 y solo envía lo necesario.</span></div>
+      <div class="feature">${icon('info')}<b>Conflictos seguros</b><span class="muted small">Si un archivo cambia en los dos sitios, se guardan las dos versiones.</span></div>
+      <div class="feature">${icon('restore')}<b>Papelera</b><span class="muted small">Lo que se borra en el ordenador se puede recuperar en Nuvora.</span></div>
     </div>
   </div>`;
+  const page = $('.sync-page');
+  const save = () => {
+    try { localStorage.setItem('nuvora-sync', JSON.stringify(syncOpts)); } catch { /* sin almacenamiento */ }
+    $('#sync-cmd').textContent = cmd();
+  };
+  page.addEventListener('change', (e) => {
+    if (e.target.name === 'sentido') syncOpts.sentido = e.target.value;
+    else if (e.target.id === 'sync-borrar') syncOpts.borrar = e.target.checked;
+    else if (e.target.id === 'sync-intervalo') syncOpts.intervalo = e.target.value;
+    save();
+  });
+  $('#sync-carpeta').addEventListener('input', (e) => { syncOpts.carpeta = e.target.value.trim(); save(); });
+  $('#copy-cmd').addEventListener('click', async () => {
+    if (await copyText(cmd())) toast('Orden copiada');
+    else { getSelection().selectAllChildren($('#sync-cmd')); toast('Selecciona la orden y cópiala'); }
+  });
 }
 
 boot();

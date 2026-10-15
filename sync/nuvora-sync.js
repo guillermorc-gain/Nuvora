@@ -3,12 +3,15 @@
  * nuvora-sync — sincroniza en ambos sentidos una carpeta local con «Mi unidad».
  *
  *   nuvora-sync login --server http://localhost:3000 --email tu@correo.com
- *   nuvora-sync sync ~/Nuvora [--watch] [--interval 10]
+ *   nuvora-sync sync ~/Nuvora [--watch] [--sentido ambos|subir|bajar] [--borrar si|no] [--intervalo 10]
  *   nuvora-sync status ~/Nuvora
  *   nuvora-sync logout
  *
  * Funciona con una comparación a tres bandas: estado local actual, estado remoto
  * actual y el estado de la última sincronización (guardado en .nuvora-sync.json).
+ *
+ * Como en Memories para ordenador, se elige el sentido: en los dos, solo subir
+ * (copia de seguridad) o solo bajar; y si los borrados viajan al otro lado.
  */
 'use strict';
 const fs = require('node:fs');
@@ -120,7 +123,11 @@ function conflictName(rel) {
 }
 
 // ---------- Motor de sincronización ----------
-async function syncOnce(client, rootDir) {
+async function syncOnce(client, rootDir, opciones = {}) {
+  const sentido = opciones.sentido || 'ambos';
+  const up = sentido !== 'bajar';
+  const down = sentido !== 'subir';
+  const borrar = opciones.borrar !== false;
   const stateFile = path.join(rootDir, STATE_NAME);
   let saved = { files: {}, dirs: [] };
   try { saved = JSON.parse(await fsp.readFile(stateFile, 'utf8')); } catch { /* primera sincronización */ }
@@ -158,9 +165,10 @@ async function syncOnce(client, rootDir) {
     stats.down++;
     log('↓', rel);
   };
-  const record = async (rel, remoteHash) => {
-    const st = await fsp.stat(absOf(rel));
-    next[rel] = { remoteHash, localHash: remoteHash, size: st.size, mtime: st.mtimeMs };
+  // Guarda lo que se sabe de cada lado. Un hash null = ese lado no lo tiene (a propósito).
+  const record = async (rel, remoteHash, localHash = remoteHash) => {
+    const st = localHash ? await fsp.stat(absOf(rel)) : null;
+    next[rel] = { remoteHash, localHash, size: st ? st.size : 0, mtime: st ? st.mtimeMs : 0 };
   };
 
   const paths = new Set([...local.files.keys(), ...remote.keys(), ...Object.keys(base)]);
@@ -173,9 +181,14 @@ async function syncOnce(client, rootDir) {
         if (l.hash === r.hash) { await record(rel, r.hash); continue; }
         const localChanged = !b || l.hash !== b.localHash;
         const remoteChanged = !b || r.hash !== b.remoteHash;
-        if (localChanged && !remoteChanged) await record(rel, await upload(rel));
-        else if (!localChanged && remoteChanged) { await downloadTo(r, rel); await record(rel, r.hash); }
-        else {
+        if (!localChanged && !remoteChanged) { next[rel] = b; continue; } // diferencia ya aceptada
+        if (localChanged && !remoteChanged) {
+          if (up) await record(rel, await upload(rel));
+          else await record(rel, r.hash, l.hash);
+        } else if (!localChanged && remoteChanged) {
+          if (down) { await downloadTo(r, rel); await record(rel, r.hash); }
+          else await record(rel, r.hash, l.hash);
+        } else if (up && down) {
           // Conflicto: se conserva la versión remota y la local se guarda con otro nombre
           const alt = conflictName(rel);
           await fsp.rename(absOf(rel), absOf(alt));
@@ -184,25 +197,52 @@ async function syncOnce(client, rootDir) {
           await record(alt, await upload(alt));
           stats.conflicts++;
           log('⚠ conflicto:', rel, '→ copia local guardada como', path.basename(alt));
-        }
-      } else if (l && !r) {
-        if (b && l.hash === b.localHash) {
-          // Se borró en la nube y no cambió en local → borrar en local
-          await fsp.rm(absOf(rel), { force: true });
-          stats.delLocal++;
-          log('✕ local', rel);
+        } else if (up) {
+          // Solo subir: la versión de Nuvora no se toca; la local sube con otro nombre
+          const alt = conflictName(rel);
+          await fsp.rename(absOf(rel), absOf(alt));
+          await record(alt, await upload(alt));
+          stats.conflicts++;
+          log('⚠ conflicto:', rel, '→ subida como', path.basename(alt));
         } else {
-          await record(rel, await upload(rel));
-        }
-      } else if (!l && r) {
-        if (b && r.hash === b.remoteHash) {
-          // Se borró en local y no cambió en la nube → a la papelera remota
-          await client.request('POST', '/api/sync/delete', { json: { path: rel } });
-          stats.delRemote++;
-          log('✕ nube', rel);
-        } else {
+          // Solo bajar: manda Nuvora; la copia local se aparta sin subirla
+          const alt = conflictName(rel);
+          await fsp.rename(absOf(rel), absOf(alt));
           await downloadTo(r, rel);
           await record(rel, r.hash);
+          stats.conflicts++;
+          log('⚠ conflicto:', rel, '→ copia local apartada como', path.basename(alt));
+        }
+      } else if (l && !r) {
+        if (b && b.remoteHash && l.hash === b.localHash) {
+          // Se borró en Nuvora y no cambió en local
+          if (down && borrar) {
+            await fsp.rm(absOf(rel), { force: true });
+            stats.delLocal++;
+            log('✕ local', rel);
+          } else await record(rel, null, l.hash);
+        } else if (b && !b.remoteHash && l.hash === b.localHash) {
+          await record(rel, null, l.hash); // ya se decidió no subirlo / conservarlo
+        } else if (up) {
+          await record(rel, await upload(rel));
+        } else {
+          await record(rel, null, l.hash);
+        }
+      } else if (!l && r) {
+        if (b && b.localHash && r.hash === b.remoteHash) {
+          // Se borró en local y no cambió en Nuvora
+          if (up && borrar) {
+            await client.request('POST', '/api/sync/delete', { json: { path: rel } });
+            stats.delRemote++;
+            log('✕ nube', rel);
+          } else await record(rel, r.hash, null);
+        } else if (b && !b.localHash && r.hash === b.remoteHash) {
+          await record(rel, r.hash, null);
+        } else if (down) {
+          await downloadTo(r, rel);
+          await record(rel, r.hash);
+        } else {
+          await record(rel, r.hash, null);
         }
       }
       // !l && !r: borrado en ambos lados, nada que hacer
@@ -214,20 +254,23 @@ async function syncOnce(client, rootDir) {
 
   // Carpetas (incluidas las vacías)
   const nextDirs = new Set();
-  for (const d of new Set([...local.dirs, ...remoteDirs, ...baseDirs])) {
+  const mkdirRemote = (d) => client.request('POST', '/api/sync/mkdir', { json: { path: d } });
+  for (const d of [...new Set([...local.dirs, ...remoteDirs, ...baseDirs])].sort()) {
     const inL = local.dirs.has(d), inR = remoteDirs.has(d), inB = baseDirs.has(d);
     try {
       if (inL && inR) nextDirs.add(d);
       else if (inL && !inR) {
-        if (inB) {
-          const abs = absOf(d);
-          if ((await fsp.readdir(abs).catch(() => [])).filter((n) => !ignored(n)).length === 0) {
-            await fsp.rm(abs, { recursive: true, force: true }); log('✕ local', `${d}/`);
-          } else { await client.request('POST', '/api/sync/mkdir', { json: { path: d } }); nextDirs.add(d); }
-        } else { await client.request('POST', '/api/sync/mkdir', { json: { path: d } }); nextDirs.add(d); }
+        const abs = absOf(d);
+        const vacia = (await fsp.readdir(abs).catch(() => [])).filter((n) => !ignored(n)).length === 0;
+        if (inB && down && borrar && vacia) { await fsp.rm(abs, { recursive: true, force: true }); log('✕ local', `${d}/`); }
+        else if (up && !(inB && vacia)) { await mkdirRemote(d); nextDirs.add(d); }
+        else if (inB) nextDirs.add(d);
       } else if (!inL && inR) {
-        if (inB) { await client.request('POST', '/api/sync/delete', { json: { path: d } }); log('✕ nube', `${d}/`); }
-        else { await fsp.mkdir(absOf(d), { recursive: true }); nextDirs.add(d); }
+        // Si en esta pasada se descargó algo dentro, la carpeta ya existe y no se borró
+        if (fs.existsSync(absOf(d))) nextDirs.add(d);
+        else if (inB && up && borrar) { await client.request('POST', '/api/sync/delete', { json: { path: d } }); log('✕ nube', `${d}/`); }
+        else if (down && !inB) { await fsp.mkdir(absOf(d), { recursive: true }); nextDirs.add(d); }
+        else if (inB) nextDirs.add(d);
       }
     } catch (err) { log('error con carpeta', d, '-', err.message); }
   }
@@ -261,9 +304,14 @@ async function cmdSync(args) {
   const client = requireClient();
   const dir = path.resolve(args._[1] || path.join(os.homedir(), 'Nuvora'));
   await fsp.mkdir(dir, { recursive: true });
-  const interval = Math.max(2, Number(args.interval) || 10) * 1000;
+  const interval = Math.max(2, Number(args.intervalo || args.interval) || 10) * 1000;
+  const sentido = ['ambos', 'subir', 'bajar'].includes(args.sentido) ? args.sentido : 'ambos';
+  const borrar = !['no', 'false', '0'].includes(String(args.borrar ?? 'si').toLowerCase());
+  const opciones = { sentido, borrar };
+  const nombres = { ambos: 'en los dos sentidos', subir: 'del ordenador a Nuvora', bajar: 'de Nuvora al ordenador' };
+  log(`Sincronizando ${dir} ${nombres[sentido]}${borrar ? '' : ', sin llevar los borrados'}`);
   const run = async () => {
-    const s = await syncOnce(client, dir);
+    const s = await syncOnce(client, dir, opciones);
     const total = s.up + s.down + s.delLocal + s.delRemote;
     if (total || !args.watch) {
       log(`✓ ${dir} sincronizada — ${s.up} subidos, ${s.down} descargados, ${s.delLocal + s.delRemote} eliminados${s.conflicts ? `, ${s.conflicts} conflictos` : ''}`);
@@ -316,7 +364,11 @@ async function main() {
 
 Uso:
   nuvora-sync login  --server URL --email CORREO   Inicia sesión
-  nuvora-sync sync   [CARPETA] [--watch] [--interval S]  Sincroniza (por defecto ~/Nuvora)
+  nuvora-sync sync   [CARPETA] [opciones]          Sincroniza (por defecto ~/Nuvora)
+      --watch                      Sigue vigilando los cambios
+      --sentido ambos|subir|bajar  En los dos sentidos (por defecto), solo subir o solo bajar
+      --borrar si|no               Llevar los borrados al otro lado (por defecto sí, a la papelera)
+      --intervalo S                Cada cuántos segundos mirar si hay cambios en Nuvora (10)
   nuvora-sync status [CARPETA]                     Muestra el estado
   nuvora-sync logout                               Cierra la sesión`);
 }

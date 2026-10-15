@@ -41,6 +41,8 @@ const ICONS = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
   back: '<path d="m15 6-6 6 6 6"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.8-1.9 0-.5-.2-.9-.5-1.3-.3-.3-.5-.8-.5-1.3 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1.2"/><circle cx="10" cy="7.2" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/>',
+  keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7.5 14h9"/>',
   terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/>',
 };
 
@@ -139,17 +141,129 @@ function openModal({ title, body, actions = [], wide = false, onClose }) {
   return { el: wrap, close };
 }
 
-function applyTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem('nuvora-theme'); } catch { /* almacenamiento no disponible */ }
-  if (saved) document.documentElement.dataset.theme = saved;
+// ---------- Apariencia (los mismos temas y opciones que Memories) ----------
+// Paleta: [fondo, tarjeta, suave, tinte, tinta, secundario, línea, acento]
+const TEMAS = {
+  nuvora: { nombre: 'Nuvora', claro: null, oscuro: null, muestra: ['#F4F6FA', '#1565C0', '#1FA5F2'], cabecera: ['#1565C0', '#0D4FA8', '#003A99'] },
+  medianoche: { nombre: 'Medianoche',
+    claro: ['#EEF2FB', '#FFFFFF', '#E6ECF8', '#DFE6FB', '#16203D', '#5D6A8F', '#D5DCEF', '#4338CA'],
+    oscuro: ['#0B1020', '#141C33', '#1A2444', '#1B2D6B', '#DCE6FF', '#8B9AC4', '#26345E', '#22D3EE'],
+    muestra: ['#0B1020', '#22D3EE', '#6366F1'], cabecera: ['#1E1B4B', '#4338CA', '#0891B2'] },
+  amanecer: { nombre: 'Amanecer',
+    claro: ['#FFF7F0', '#FFFFFF', '#FFF0E6', '#FFE7D8', '#3B2A24', '#9B7D70', '#FFD9C2', '#C2410C'],
+    oscuro: ['#1F1512', '#2A1D18', '#33231D', '#4A2A1F', '#FFE9DC', '#C09A88', '#4A342A', '#FF9A66'],
+    muestra: ['#FFF7F0', '#FF8A4C', '#FF5F7E'], cabecera: ['#FF7A45', '#FF4F7B', '#B83280'] },
+  bosque: { nombre: 'Bosque',
+    claro: ['#F1EFE6', '#FBFAF5', '#ECE8DA', '#E3ECDC', '#233127', '#6F7A68', '#DCD7C5', '#2F5A3E'],
+    oscuro: ['#141C16', '#1C261F', '#223027', '#2A3D2F', '#E3EADB', '#9AA892', '#2F3F33', '#8FBF6A'],
+    muestra: ['#F1EFE6', '#2F5A3E', '#6B8F47'], cabecera: ['#1F3B2A', '#3F6B3A', '#7A9A3F'] },
+  oceano: { nombre: 'Océano',
+    claro: ['#E6F6FA', '#FFFFFF', '#DFF1F7', '#D3EEF6', '#0F3B4C', '#5B7F8F', '#C9E3EC', '#0A6F94'],
+    oscuro: ['#06222E', '#0B2F3D', '#0F3848', '#10455A', '#D6F3FB', '#7FB0C0', '#15485A', '#3FD0E0'],
+    muestra: ['#E0F7FA', '#00A6B8', '#1565C0'], cabecera: ['#033E6B', '#0369A1', '#06B6D4'] },
+  grafito: { nombre: 'Grafito',
+    claro: ['#F2F1EE', '#FFFFFF', '#EAE8E3', '#F7EECD', '#26272B', '#6D6B66', '#DEDBD3', '#8A6508'],
+    oscuro: ['#1A1B1E', '#232428', '#2A2B30', '#3A3320', '#E6E3DC', '#9A978F', '#34353A', '#F4C542'],
+    muestra: ['#1A1B1E', '#F4C542', '#34353A'], cabecera: ['#141518', '#2E2F35', '#8A6A12'] },
+  pastel: { nombre: 'Pastel',
+    claro: ['#F6F3FF', '#FFFFFF', '#F1EDFF', '#ECE6FF', '#3D3654', '#8A83A3', '#E5DEFA', '#6D4FE0'],
+    oscuro: ['#1E1B2E', '#28243D', '#2F2A48', '#3A3358', '#ECE6FF', '#A79FC4', '#3D3660', '#C9B8FF'],
+    muestra: ['#F6F3FF', '#C9B8FF', '#A8E6CF'], cabecera: ['#7C6CF0', '#B794F6', '#F0A6CA'] },
+  retro: { nombre: 'Retro 80',
+    claro: ['#FFF0FA', '#FFFFFF', '#FBE6F5', '#F3E0FF', '#2B1640', '#7A5C96', '#E9C6F0', '#B00D72'],
+    oscuro: ['#1B0F33', '#251548', '#2D1A57', '#3A2468', '#F3E9FF', '#B7A3D9', '#784BA0', '#FFD319'],
+    muestra: ['#1B0F33', '#FF3CAC', '#FFD319'], cabecera: ['#3B0A6B', '#C0157F', '#FF8A00'] },
+  mediterraneo: { nombre: 'Mediterráneo',
+    claro: ['#FBFAF7', '#FFFFFF', '#F4F1EA', '#E8EEF6', '#1D3557', '#6B7A8F', '#E7E2D8', '#1D4E89'],
+    oscuro: ['#0F1A2B', '#16243A', '#1B2C46', '#1D3557', '#E8EEF6', '#93A4BD', '#26395A', '#7FB2F0'],
+    muestra: ['#FBFAF7', '#1D4E89', '#C8553D'], cabecera: ['#1D4E89', '#2F6FB3', '#C8553D'] },
+};
+
+const LETRAS = {
+  sistema: { nombre: 'La del sistema', css: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  clasica: { nombre: 'Clásica', css: '"Lora", Georgia, serif', g: 'Lora:wght@400;500;600;700' },
+  elegante: { nombre: 'Elegante', css: '"Playfair Display", Georgia, serif', g: 'Playfair+Display:wght@400;600;700;800' },
+  moderna: { nombre: 'Moderna', css: '"Montserrat", system-ui, sans-serif', g: 'Montserrat:wght@400;500;600;700;800' },
+  redondeada: { nombre: 'Redondeada', css: '"Nunito", system-ui, sans-serif', g: 'Nunito:wght@400;600;700;800' },
+  suave: { nombre: 'Suave', css: '"Quicksand", system-ui, sans-serif', g: 'Quicksand:wght@400;500;600;700' },
+  geometrica: { nombre: 'Geométrica', css: '"Comfortaa", system-ui, sans-serif', g: 'Comfortaa:wght@400;600;700' },
+  estrecha: { nombre: 'Estrecha', css: '"Roboto Condensed", "Arial Narrow", sans-serif', g: 'Roboto+Condensed:wght@400;600;700' },
+  maquina: { nombre: 'Máquina de escribir', css: '"Courier Prime", "Courier New", monospace', g: 'Courier+Prime:wght@400;700' },
+  amano: { nombre: 'A mano', css: '"Caveat", "Segoe Print", cursive', g: 'Caveat:wght@400;600;700' },
+};
+
+const FORMAS = {
+  clasico: { nombre: 'Clásico', r: [8, 12, 16, 22, 999] },
+  redondeado: { nombre: 'Redondeado', r: [14, 20, 26, 26, 999] },
+  recto: { nombre: 'Recto', r: [3, 3, 3, 3, 3] },
+  plano: { nombre: 'Plano', r: [5, 7, 10, 13, 999] },
+};
+
+const APARIENCIA_POR_DEFECTO = {
+  tema: 'nuvora', modo: 'sistema', texto: 'normal', estilo: 'clasico', fuente: 'sistema',
+  cabecera: 'degradado', pestanas: 'todo', animaciones: true, inicio: 'drive',
+};
+
+function leerApariencia() {
+  try { return { ...APARIENCIA_POR_DEFECTO, ...JSON.parse(localStorage.getItem('nuvora-apariencia') || '{}') }; }
+  catch { return { ...APARIENCIA_POR_DEFECTO }; }
 }
-applyTheme();
+
+let apariencia = leerApariencia();
+const oscuroDelSistema = matchMedia('(prefers-color-scheme: dark)');
+
+function esOscuro() {
+  return apariencia.modo === 'oscuro' || (apariencia.modo === 'sistema' && oscuroDelSistema.matches);
+}
+
+function oscurecer(hex, f = 0.62) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.round(((n >> v) & 255) * f).toString(16).padStart(2, '0');
+  return `#${c(16)}${c(8)}${c(0)}`;
+}
+
+function aplicarApariencia() {
+  const root = document.documentElement;
+  const a = apariencia;
+  const oscuro = esOscuro();
+  if (a.modo === 'sistema') delete root.dataset.theme; else root.dataset.theme = a.modo === 'oscuro' ? 'dark' : 'light';
+  const props = ['--bg', '--surface', '--surface-2', '--tint', '--text', '--muted', '--border', '--primary', '--primary-ink', '--head-1', '--head-2', '--head-3'];
+  props.forEach((p) => root.style.removeProperty(p));
+  const tema = TEMAS[a.tema];
+  if (tema && tema.claro) {
+    const p = oscuro ? tema.oscuro : tema.claro;
+    const vals = [p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], oscuro ? p[0] : '#FFFFFF',
+      ...tema.cabecera.map((c) => (oscuro ? oscurecer(c) : c))];
+    props.forEach((prop, i) => root.style.setProperty(prop, vals[i]));
+  }
+  const letra = LETRAS[a.fuente] || LETRAS.sistema;
+  if (letra.g && !document.getElementById(`font-${a.fuente}`)) {
+    const link = document.createElement('link');
+    link.id = `font-${a.fuente}`;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${letra.g}&display=swap`;
+    document.head.appendChild(link);
+  }
+  root.style.setProperty('--font', letra.css);
+  const r = (FORMAS[a.estilo] || FORMAS.clasico).r;
+  ['--r-sm', '--r-md', '--r-lg', '--r-xl', '--r-pill'].forEach((v, i) => root.style.setProperty(v, `${r[i]}px`));
+  root.style.setProperty('--zoom', { pequeno: 0.9, grande: 1.12, muygrande: 1.25 }[a.texto] || 1);
+  root.classList.toggle('liso', a.cabecera === 'liso');
+  root.classList.toggle('solo-iconos', a.pestanas === 'iconos');
+  root.classList.toggle('no-anim', !a.animaciones);
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.content = getComputedStyle(root).getPropertyValue('--head-1').trim() || '#1565C0';
+}
+
+function guardarApariencia(cambios) {
+  apariencia = { ...apariencia, ...cambios };
+  try { localStorage.setItem('nuvora-apariencia', JSON.stringify(apariencia)); } catch { /* sin almacenamiento */ }
+  aplicarApariencia();
+}
+
+oscuroDelSistema.addEventListener('change', aplicarApariencia);
+aplicarApariencia();
 
 function toggleTheme() {
-  const current = document.documentElement.dataset.theme
-    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('nuvora-theme', next); } catch { /* sin almacenamiento */ }
+  guardarApariencia({ modo: esOscuro() ? 'claro' : 'oscuro' });
 }

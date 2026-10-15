@@ -2,14 +2,23 @@
 
 Nuvora es una nube personal estilo Google Drive para **guardar, compartir y sincronizar** archivos, fotos, videos y lo que quieras.
 
+Es de la misma familia que **Memories**: el icono usa sus flechas de sincronizar (con una nube en el centro), el
+logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la interfaz sus temas y opciones de apariencia.
+
 ## Funciones
 
 **Archivos y carpetas**
 - Subida de archivos y carpetas completas (botón *Nuevo* o arrastrando y soltando), con barra de progreso.
 - Carpetas anidadas, renombrar, mover (diálogo o arrastrando sobre una carpeta), copiar, destacar.
 - Papelera con restauración y vaciado; búsqueda instantánea por nombre.
-- Vista en cuadrícula con miniaturas o en lista; tema claro/oscuro; diseño adaptable a móvil.
+- Vista en cuadrícula con miniaturas o en lista; diseño adaptable a móvil con pestañas abajo y botón «Nuevo» flotante.
 - Atajos: `Supr` papelera · `F2` renombrar · `Enter` abrir · `Ctrl/⌘+A` seleccionar todo · `Shift/Ctrl+clic` selección múltiple.
+
+**Apariencia** (como en Memories)
+- Temas: Nuvora, Medianoche, Amanecer, Bosque, Océano, Grafito, Pastel, Retro 80 y Mediterráneo, cada uno con su versión clara y oscura.
+- Modo claro, oscuro o como el sistema; letra, formas (clásico, redondeado, recto, plano), tamaño del texto,
+  cabecera con degradado o lisa, pestañas con nombre o solo icono, animaciones y la vista con la que se abre.
+- Anillo que gira alrededor de la foto de perfil mientras se suben o llegan cambios.
 
 **Vista previa**
 - Imágenes, video y audio (con *streaming* por rangos para poder saltar dentro de un video), PDF y texto/código.
@@ -22,7 +31,9 @@ Nuvora es una nube personal estilo Google Drive para **guardar, compartir y sinc
 
 **Sincronización**
 - Cambios en **tiempo real** en la web (Server-Sent Events): si subes algo desde otro dispositivo, aparece al instante.
-- Cliente de escritorio **`nuvora-sync`**: sincroniza en ambos sentidos una carpeta local con *Mi unidad*, detecta cambios por huella SHA-256, resuelve conflictos conservando las dos versiones y manda los borrados a la papelera.
+- Cliente de escritorio **`nuvora-sync`**: mantiene una carpeta local al día con *Mi unidad*, detecta cambios por huella SHA-256 y resuelve conflictos conservando las dos versiones.
+- Como en Memories para ordenador, eliges el **sentido** (en los dos, solo subir como copia de seguridad, o solo bajar)
+  y si los **borrados** viajan al otro lado (a la papelera de Nuvora, recuperables). La página *Sincronización* de la web te prepara la orden.
 
 **Por dentro**
 - Almacenamiento direccionado por contenido: los archivos idénticos sólo ocupan espacio una vez.
@@ -53,6 +64,7 @@ Variables de entorno opcionales:
 ```bash
 node sync/nuvora-sync.js login --server http://localhost:3000 --email tu@correo.com
 node sync/nuvora-sync.js sync ~/Nuvora --watch     # se queda vigilando cambios
+node sync/nuvora-sync.js sync ~/Copia --watch --sentido subir --borrar no   # copia de seguridad
 node sync/nuvora-sync.js status ~/Nuvora
 ```
 
@@ -64,7 +76,11 @@ También puedes instalarlo como comando global con `npm link` y usar `nuvora-syn
 npm test
 ```
 
-Cubren autenticación, subidas, carpetas, papelera, descargas por rangos, ZIP, permisos al compartir, enlaces con contraseña, cuota y la sincronización bidireccional (incluidos conflictos y borrados).
+Cubren autenticación, subidas, carpetas, papelera, descargas por rangos, ZIP, permisos al compartir, enlaces con contraseña, cuota y la sincronización (en los dos sentidos, solo subir, solo bajar, conflictos y borrados).
+
+## Créditos
+
+La letra del logotipo es [Dancing Script](https://fonts.google.com/specimen/Dancing+Script) (licencia SIL Open Font License), la misma que usa Memories.
 
 ## Estructura
 

@@ -2,17 +2,23 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Nuvora</title>
-  <meta name="theme-color" content="#7C5CFF">
+  <meta name="theme-color" content="#1565C0">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="preload" href="/fonts/dancing_script.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <!-- Pantalla de acceso -->
   <section id="auth" class="auth hidden">
     <div class="auth-card">
-      <div class="brand big"><img src="/icon.svg" alt=""><span>Nuvora</span></div>
+      <img class="app-icon" src="/icon.svg" alt="">
+      <div class="logo" aria-label="Nuvora">
+        <span class="wordmark">Nuvora</span>
+        <div class="reflejo" aria-hidden="true"><span class="wordmark">Nuvora</span></div>
+      </div>
       <p class="muted">Tus archivos, videos y fotos en la nube. Compártelos y sincronízalos en todos tus dispositivos.</p>
       <div class="tabs" role="tablist">
         <button class="tab active" data-mode="login" role="tab">Iniciar sesión</button>
@@ -32,15 +38,16 @@
   <div id="app" class="app hidden">
     <header class="topbar">
       <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menú" data-icon="menu"></button>
-      <a class="brand" href="#/drive"><img src="/icon.svg" alt=""><span>Nuvora</span></a>
+      <a class="brand" href="#/drive" aria-label="Nuvora"><img src="/icon.svg" alt=""><span class="wordmark on-head">Nuvora</span></a>
       <div class="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
         <input id="search" type="search" placeholder="Buscar en Nuvora" autocomplete="off">
       </div>
       <div class="top-actions">
         <span class="live" id="live" title="Sincronización en tiempo real"><i></i><span>En vivo</span></span>
-        <button class="icon-btn" id="theme-btn" title="Cambiar tema" aria-label="Cambiar tema" data-icon="moon"></button>
-        <button class="avatar" id="avatar-btn" aria-label="Cuenta"></button>
+        <button class="icon-btn" id="theme-btn" title="Modo claro u oscuro" aria-label="Modo claro u oscuro" data-icon="moon"></button>
+        <button class="icon-btn" id="settings-btn" title="Apariencia" aria-label="Apariencia" data-icon="palette"></button>
+        <div class="ring" id="ring"><button class="avatar" id="avatar-btn" aria-label="Cuenta"></button></div>
       </div>
     </header>
 
@@ -65,7 +72,10 @@
 
     <main class="main" id="main">
       <div class="toolbar">
-        <nav class="crumbs" id="crumbs"></nav>
+        <div class="heading">
+          <nav class="crumbs" id="crumbs"></nav>
+          <p class="subtitle" id="subtitle"></p>
+        </div>
         <div class="toolbar-actions">
           <button class="btn ghost hidden" id="empty-trash">Vaciar papelera</button>
           <div class="seg">
@@ -77,6 +87,15 @@
       <div id="content" class="content"></div>
       <div class="drop-hint" id="drop-hint"><div>Suelta los archivos para subirlos a <b id="drop-target">Mi unidad</b></div></div>
     </main>
+
+    <nav class="tabbar" id="tabbar">
+      <a href="#/drive" data-view="drive"><span class="pill" data-icon="drive"></span><em>Mi unidad</em></a>
+      <a href="#/shared" data-view="shared"><span class="pill" data-icon="people"></span><em>Compartido</em></a>
+      <a href="#/recent" data-view="recent"><span class="pill" data-icon="clock"></span><em>Recientes</em></a>
+      <a href="#/starred" data-view="starred"><span class="pill" data-icon="star"></span><em>Destacados</em></a>
+      <a href="#/sync" data-view="sync"><span class="pill" data-icon="sync"></span><em>Sincronizar</em></a>
+    </nav>
+    <button class="fab" id="fab"><span data-icon="plus"></span>Nuevo</button>
   </div>
 
   <!-- Menús, diálogos y paneles -->
