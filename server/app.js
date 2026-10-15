@@ -357,7 +357,8 @@ function createApp(options = {}) {
   app.get('/api/me', auth, (req, res) => res.json(meResponse(req.user)));
 
   // Lo que la web necesita saber antes de iniciar sesión
-  app.get('/api/config', (req, res) => res.json({ googleClientId: google.clientId }));
+  // (la app de Android la usa también para encontrar el servidor en la wifi)
+  app.get('/api/config', (req, res) => res.json({ nuvora: true, nombre: require('node:os').hostname(), googleClientId: google.clientId }));
 
   // ----- Iniciar sesión con Google (las mismas cuentas que Memories) -----
   app.post('/api/auth/google', wrap(async (req, res) => {

@@ -46,8 +46,8 @@ logotipo la misma letra caligráfica con degradado, brillo y reflejo, y la inter
 
 Cada cambio en la app se prueba y se publica automáticamente en
 [Releases](https://github.com/guillermorc-gain/Nuvora/releases) como `v0.1`, `v0.2`… (workflow
-`.github/workflows/publicar.yml`). El ZIP ya incluye las dependencias: descomprímelo, entra en
-`Nuvora` y ejecuta `npm start`.
+`.github/workflows/publicar.yml`). El ZIP ya incluye las dependencias: descomprímelo y abre
+**Iniciar Nuvora** con doble clic (Windows: `.bat`; Mac: `.command`). Solo necesitas [Node.js](https://nodejs.org/es/download) 22.13 o superior.
 
 ## Puesta en marcha
 
@@ -121,9 +121,11 @@ apunta el túnel a `http://localhost:3000` y arranca con `NUVORA_TUNEL=nuvora np
 y además permite elegir archivos del móvil para subirlos, guarda las descargas en «Descargas», pone el
 vídeo a pantalla completa y tiñe la barra de estado con el color del tema.
 
-1. Arranca el servidor en el ordenador: `npm start` muestra una línea «En el móvil: http://192.168.…:3000»
-   (o `npm run tunel` para una dirección que funciona también fuera de casa).
-2. Instala `Nuvora.apk` (hay que permitir instalar apps de origen desconocido) y escribe esa dirección.
+1. Arranca el servidor en el ordenador: doble clic en **Iniciar Nuvora** (o `npm start`).
+   Si Windows pregunta por el cortafuegos, permite el acceso en **redes privadas**.
+2. Instala `Nuvora.apk` (hay que permitir instalar apps de origen desconocido). Con el móvil en la misma wifi,
+   la app **busca sola tu Nuvora** y se conecta. También se puede escribir la dirección a mano
+   (la línea «En el móvil: http://…» del ordenador, o la `https://…` de `npm run tunel` fuera de casa).
 3. Entra con **Continuar con Google** (ver *Iniciar sesión con Google*).
 4. Para cambiar de servidor: foto de perfil → *Cambiar de servidor*.
 

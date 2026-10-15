@@ -15,6 +15,7 @@
       :root { --bg: #0F131A; --surface: #181D26; --text: #E3E7EE; --muted: #AAB3C2; --border: #2A303B; --primary: #8AB4F8; --tint: #1B3A6B; --danger: #FF8A80; color-scheme: dark; }
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; min-height: 100%; }
     body {
       font: 15px/1.5 system-ui, -apple-system, Roboto, sans-serif; color: var(--text);
@@ -47,8 +48,25 @@
     button:disabled { opacity: .6; }
     .error { color: var(--danger); font-size: 14px; margin: 12px 0 0; text-align: left; }
     .ayuda { margin-top: 18px; padding: 14px; border-radius: 14px; background: var(--tint); font-size: 13.5px; color: var(--text); }
-    .ayuda b { display: block; margin-bottom: 4px; }
+    .ayuda .titulo { display: block; margin-bottom: 4px; }
     code { font: 13px ui-monospace, monospace; }
+    .buscando { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; margin: 4px 0 12px; }
+    .buscando i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); animation: giro .8s linear infinite; flex: none; }
+    @keyframes giro { to { transform: rotate(360deg); } }
+    .encontrados { display: grid; gap: 8px; margin-bottom: 14px; }
+    .servidor { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0; padding: 12px 14px; border-radius: 14px;
+      background: var(--tint); color: var(--text); border: 1px solid var(--primary); text-align: left; font: inherit; }
+    .servidor svg { width: 26px; height: 26px; flex: none; color: var(--primary); }
+    .servidor b { display: block; }
+    .servidor span { font-size: 12.5px; color: var(--muted); }
+    .manual { margin-top: 6px; }
+    .manual summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: 14px; padding: 6px 0; list-style: none; }
+    .manual summary::-webkit-details-marker { display: none; }
+    .pasos { margin: 0; padding-left: 20px; }
+    .pasos li { margin: 4px 0; }
+    .pasos a { color: var(--primary); font-weight: 600; }
+    .google-nota { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 13px; color: var(--muted); margin-top: 16px; }
+    .google-nota svg { width: 16px; height: 16px; }
   </style>
 </head>
 <body>
@@ -58,39 +76,94 @@
       <span class="wordmark">Nuvora</span>
       <div class="reflejo" aria-hidden="true"><span class="wordmark">Nuvora</span></div>
     </div>
-    <p>Conecta la app con tu servidor Nuvora para ver, subir y compartir tus archivos.</p>
-    <label for="url">Dirección del servidor</label>
-    <input id="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="192.168.1.20:3000" required>
+    <p>Tus archivos se guardan en Nuvora, en tu ordenador. Conecta el móvil con él y entra con tu cuenta de Google.</p>
+    <div class="buscando" id="buscando" hidden><i></i><span>Buscando Nuvora en tu wifi…</span></div>
+    <div class="encontrados" id="encontrados"></div>
     <div class="error" id="error" hidden></div>
-    <button id="boton">Conectar</button>
-    <div class="ayuda">
-      <b>¿Dónde la encuentro?</b>
-      En el ordenador donde funciona Nuvora, al ejecutar <code>npm start</code> aparece la línea
-      «En el móvil: http://…». El móvil tiene que estar en la misma red wifi.
+    <div class="ayuda" id="pasos" hidden>
+      <b class="titulo">¿Aún no tienes Nuvora en el ordenador?</b>
+      <ol class="pasos">
+        <li>En el ordenador, descarga <a href="https://github.com/guillermorc-gain/Nuvora/releases/latest/download/Nuvora.zip">Nuvora.zip</a> y descomprímelo.</li>
+        <li>Abre <b>Iniciar Nuvora</b> (necesita <a href="https://nodejs.org/es/download">Node.js</a>). Si Windows pregunta, permite el acceso en redes privadas.</li>
+        <li>Con el móvil en la misma wifi, toca <b>Buscar otra vez</b>.</li>
+      </ol>
+      <button type="button" id="rebuscar">Buscar otra vez</button>
     </div>
+    <details class="manual" id="manual">
+      <summary>Escribir la dirección a mano</summary>
+      <label for="url">Dirección del servidor</label>
+      <input id="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="192.168.1.20:3000 o https://…">
+      <button id="boton">Conectar</button>
+      <p style="text-align:left;font-size:13px;margin:10px 0 0">Aparece en el ordenador al abrir Nuvora («En el móvil: http://…»). Fuera de casa, usa la dirección <code>https://…</code> de <code>npm run tunel</code>.</p>
+    </details>
+    <div class="google-nota"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>Después de conectar, entras con Google</div>
   </form>
   <script>
     const q = new URLSearchParams(location.search);
-    const input = document.getElementById('url');
-    const boton = document.getElementById('boton');
-    const caja = document.getElementById('error');
+    const $ = (id) => document.getElementById(id);
+    const input = $('url'), boton = $('boton'), caja = $('error');
+    const PC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
     if (q.get('url')) input.value = q.get('url').replace(/^http:\/\//, '');
+
     function mostrarError(msg) {
       caja.textContent = msg;
       caja.hidden = false;
       boton.disabled = false;
       boton.textContent = 'Conectar';
+      document.querySelectorAll('.servidor').forEach((b) => { b.disabled = false; });
     }
     window.mostrarError = mostrarError;
-    if (q.get('error')) mostrarError('No se pudo abrir el servidor. Comprueba que está encendido y que el móvil está en la misma red.');
-    document.getElementById('f').addEventListener('submit', (e) => {
-      e.preventDefault();
+
+    function conectar(url) {
       caja.hidden = true;
+      if (window.NuvoraApp) NuvoraApp.conectar(url);
+      else mostrarError('Esta pantalla solo funciona dentro de la app Nuvora.');
+    }
+
+    const vistos = new Set();
+    window.servidorEncontrado = (url, nombre) => {
+      if (vistos.has(url)) return;
+      vistos.add(url);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'servidor';
+      b.innerHTML = `${PC}<span><b></b><span></span></span>`;
+      b.querySelector('b').textContent = nombre;
+      b.querySelector('span span').textContent = url.replace('http://', '') + ' · Toca para conectar';
+      b.onclick = () => { b.disabled = true; conectar(url); };
+      $('encontrados').appendChild(b);
+      $('pasos').hidden = true;
+    };
+    window.busquedaTerminada = (n, hayWifi) => {
+      $('buscando').hidden = true;
+      if (n === 0) {
+        $('pasos').hidden = false;
+        if (!hayWifi) mostrarError('El móvil no está conectado a ninguna wifi.');
+      } else if (n === 1 && !q.get('error') && !q.get('url')) {
+        // Solo hay uno: se conecta directamente
+        document.querySelector('.servidor').click();
+      }
+    };
+    function buscar() {
+      if (!window.NuvoraApp || !NuvoraApp.buscarServidores) { $('manual').open = true; return; }
+      $('encontrados').innerHTML = '';
+      vistos.clear();
+      $('pasos').hidden = true;
+      $('buscando').hidden = false;
+      NuvoraApp.buscarServidores();
+    }
+    $('rebuscar').onclick = buscar;
+
+    if (q.get('error')) mostrarError('No se pudo abrir el servidor. Comprueba que Nuvora está abierto en el ordenador y que el móvil está en la misma wifi.');
+    if (q.get('url')) $('manual').open = true;
+    $('f').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!input.value.trim()) return;
       boton.disabled = true;
       boton.textContent = 'Conectando…';
-      if (window.NuvoraApp) NuvoraApp.conectar(input.value);
-      else mostrarError('Esta pantalla solo funciona dentro de la app Nuvora.');
+      conectar(input.value);
     });
+    buscar();
   </script>
 </body>
 </html>

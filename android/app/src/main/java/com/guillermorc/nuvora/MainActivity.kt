@@ -41,6 +41,11 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import org.json.JSONObject
 import java.util.concurrent.Executor
 import java.net.HttpURLConnection
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.net.URL
 import kotlin.concurrent.thread
 
@@ -153,6 +158,15 @@ class MainActivity : Activity() {
             }
         }
 
+        /**
+         * Busca servidores Nuvora en la wifi: prueba el puerto 3000 de todas las
+         * direcciones de la red del móvil y avisa a la página de cada uno que encuentra.
+         */
+        @JavascriptInterface
+        fun buscarServidores() {
+            thread { buscarEnLaWifi() }
+        }
+
         @JavascriptInterface
         fun servidor(): String = this@MainActivity.servidor ?: ""
 
@@ -217,6 +231,39 @@ class MainActivity : Activity() {
 
     private fun errorGoogle(mensaje: String) =
         js("window.nuvoraGoogleError && nuvoraGoogleError(${JSONObject.quote(mensaje)})")
+
+    private fun buscarEnLaWifi() {
+        val propias = NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .filter { it.isSiteLocalAddress }
+        val redes = propias.map { it.hostAddress!!.substringBeforeLast('.') }.distinct()
+        val encontrados = AtomicInteger(0)
+        val grupo = Executors.newFixedThreadPool(48)
+        for (red in redes) for (n in 1..254) {
+            grupo.execute {
+                val url = "http://$red.$n:$PUERTO"
+                try {
+                    val c = URL("$url/api/config").openConnection() as HttpURLConnection
+                    c.connectTimeout = 700
+                    c.readTimeout = 1500
+                    if (c.responseCode == 200) {
+                        val datos = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+                        if (datos.optBoolean("nuvora")) {
+                            encontrados.incrementAndGet()
+                            val nombre = datos.optString("nombre", "$red.$n")
+                            runOnUiThread { js("window.servidorEncontrado && servidorEncontrado(${JSONObject.quote(url)}, ${JSONObject.quote(nombre)})") }
+                        }
+                    }
+                    c.disconnect()
+                } catch (_: Exception) { }
+            }
+        }
+        grupo.shutdown()
+        grupo.awaitTermination(30, TimeUnit.SECONDS)
+        runOnUiThread { js("window.busquedaTerminada && busquedaTerminada(${encontrados.get()}, ${redes.isNotEmpty()})") }
+    }
 
     /** null si en [url] responde un servidor Nuvora; si no, el motivo para enseñarlo. */
     private fun comprobar(url: String): String? = try {
@@ -341,5 +388,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ELEGIR_ARCHIVOS = 7
+        private const val PUERTO = 3000
     }
 }
